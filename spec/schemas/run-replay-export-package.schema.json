@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/run-replay-export-package.schema.json",
+  "title": "RunReplayExportPackage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "exported_at",
+    "run_id",
+    "workspace_id",
+    "agent_id",
+    "run_status",
+    "replay_integrity",
+    "signature"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^agt_[A-Za-z0-9_-]{6,64}$"
+    },
+    "run_status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "running",
+        "waiting_approval",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "replay_integrity": {
+      "$ref": "https://flockmesh.dev/spec/schemas/run-replay-integrity.schema.json#"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "payload_hash",
+        "signature"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "HMAC-SHA256"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^exp_[A-Za-z0-9_-]{4,64}$"
+        },
+        "payload_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

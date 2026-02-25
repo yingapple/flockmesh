@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/action-intent.schema.json",
+  "title": "ActionIntent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "run_id",
+    "step_id",
+    "capability",
+    "side_effect",
+    "risk_hint",
+    "parameters"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^act_[A-Za-z0-9_-]{6,64}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "step_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,64}$"
+    },
+    "connector_binding_id": {
+      "type": "string",
+      "pattern": "^cnb_[A-Za-z0-9_-]{6,64}$"
+    },
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "side_effect": {
+      "type": "string",
+      "enum": [
+        "none",
+        "mutation"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "risk_hint": {
+      "type": "string",
+      "enum": [
+        "R0",
+        "R1",
+        "R2",
+        "R3"
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "side_effect": {
+            "const": "mutation"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ]
+      }
+    }
+  ]
+}

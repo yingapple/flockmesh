@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/agent-blueprint-remediation-plan.schema.json",
+  "title": "AgentBlueprintRemediationPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "workspace_id",
+    "kit_id",
+    "summary",
+    "connector_actions",
+    "policy_candidates",
+    "auto_fix_request",
+    "auto_fix_preview",
+    "unresolved_capabilities",
+    "planner_metrics",
+    "recommendations"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+    },
+    "kit_id": {
+      "type": "string",
+      "pattern": "^kit_[A-Za-z0-9_-]{4,64}$"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status_before",
+        "score_before",
+        "status_after_estimate",
+        "score_after_estimate",
+        "expected_delta"
+      ],
+      "properties": {
+        "status_before": {
+          "type": "string",
+          "enum": ["pass", "warn", "fail"]
+        },
+        "score_before": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "status_after_estimate": {
+          "type": "string",
+          "enum": ["pass", "warn", "fail"]
+        },
+        "score_after_estimate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "expected_delta": {
+          "type": "integer",
+          "minimum": -100,
+          "maximum": 100
+        }
+      }
+    },
+    "connector_actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suggested_connector_ids",
+        "add",
+        "remove"
+      ],
+      "properties": {
+        "suggested_connector_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+          }
+        },
+        "add": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/connector_add"
+          }
+        },
+        "remove": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/connector_remove"
+          }
+        }
+      }
+    },
+    "policy_candidates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "items"
+      ],
+      "properties": {
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "org_policy",
+            "workspace_policy",
+            "agent_policy",
+            "run_override"
+          ],
+          "properties": {
+            "org_policy": { "type": "string" },
+            "workspace_policy": { "type": "string" },
+            "agent_policy": { "type": "string" },
+            "run_override": { "type": "string" }
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/policy_candidate"
+          }
+        }
+      }
+    },
+    "auto_fix_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "kit_id",
+        "owners",
+        "agent_name",
+        "selected_connector_ids",
+        "policy_context"
+      ],
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+        },
+        "kit_id": {
+          "type": "string",
+          "pattern": "^kit_[A-Za-z0-9_-]{4,64}$"
+        },
+        "owners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(usr|svc)_[A-Za-z0-9_-]{4,64}$"
+          }
+        },
+        "agent_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "selected_connector_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+          }
+        },
+        "policy_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "org_policy",
+            "workspace_policy",
+            "agent_policy",
+            "run_override"
+          ],
+          "properties": {
+            "org_policy": { "type": "string" },
+            "workspace_policy": { "type": "string" },
+            "agent_policy": { "type": "string" },
+            "run_override": { "type": "string" }
+          }
+        }
+      }
+    },
+    "auto_fix_preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_coverage",
+        "policy_projection_summary",
+        "approval_forecast",
+        "lint_summary"
+      ],
+      "properties": {
+        "capability_coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required_total",
+            "covered_total",
+            "gap_total",
+            "covered_capabilities",
+            "missing_capabilities"
+          ],
+          "properties": {
+            "required_total": { "type": "integer", "minimum": 0 },
+            "covered_total": { "type": "integer", "minimum": 0 },
+            "gap_total": { "type": "integer", "minimum": 0 },
+            "covered_capabilities": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/capability" }
+            },
+            "missing_capabilities": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/capability" }
+            }
+          }
+        },
+        "policy_projection_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "allow", "escalate", "deny"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "allow": { "type": "integer", "minimum": 0 },
+            "escalate": { "type": "integer", "minimum": 0 },
+            "deny": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "approval_forecast": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total_actions",
+            "escalated_actions",
+            "denied_actions",
+            "max_required_approvals"
+          ],
+          "properties": {
+            "total_actions": { "type": "integer", "minimum": 0 },
+            "escalated_actions": { "type": "integer", "minimum": 0 },
+            "denied_actions": { "type": "integer", "minimum": 0 },
+            "max_required_approvals": { "type": "integer", "minimum": 0, "maximum": 5 }
+          }
+        },
+        "lint_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "score",
+            "total_checks",
+            "passed",
+            "warned",
+            "failed"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["pass", "warn", "fail"]
+            },
+            "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+            "total_checks": { "type": "integer", "minimum": 0 },
+            "passed": { "type": "integer", "minimum": 0 },
+            "warned": { "type": "integer", "minimum": 0 },
+            "failed": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "unresolved_capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "planner_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["elapsed_ms"],
+      "properties": {
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/recommendation"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "connector_add": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector_id",
+        "reason",
+        "covered_capabilities",
+        "trust_level",
+        "category"
+      ],
+      "properties": {
+        "connector_id": {
+          "type": "string",
+          "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+        },
+        "reason": {
+          "type": "string",
+          "const": "capability_gap"
+        },
+        "covered_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": ["sandbox", "standard", "high_control", "unknown"]
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      }
+    },
+    "connector_remove": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connector_id", "reason"],
+      "properties": {
+        "connector_id": {
+          "type": "string",
+          "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["manifest_missing", "no_scope_match"]
+        }
+      }
+    },
+    "policy_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "type",
+        "target_capabilities",
+        "rationale",
+        "risk_tradeoff",
+        "suggested_run_override"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "policy_profile_review",
+            "approval_capacity",
+            "run_override_candidate",
+            "policy_profile_patch"
+          ]
+        },
+        "target_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "risk_tradeoff": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "suggested_run_override": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "applicability": {
+          "type": "string",
+          "enum": ["direct", "manual", "informational"]
+        },
+        "target_profile": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "patch_rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/policy_patch_rule"
+          }
+        },
+        "estimated_effect": {
+          "$ref": "#/$defs/policy_estimated_effect"
+        }
+      }
+    },
+    "policy_patch_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "decision", "required_approvals"],
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/capability"
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["allow", "escalate", "deny"]
+        },
+        "required_approvals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      }
+    },
+    "policy_estimated_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status_after_estimate",
+        "score_after_estimate",
+        "expected_delta"
+      ],
+      "properties": {
+        "status_after_estimate": {
+          "type": "string",
+          "enum": ["pass", "warn", "fail"]
+        },
+        "score_after_estimate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "expected_delta": {
+          "type": "integer",
+          "minimum": -100,
+          "maximum": 100
+        }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "message", "priority"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 320 },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] }
+      }
+    }
+  }
+}

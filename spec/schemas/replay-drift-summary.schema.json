@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/replay-drift-summary.schema.json",
+  "title": "ReplayDriftSummary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "window",
+    "totals",
+    "alert",
+    "items"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "limit",
+        "include_pending",
+        "alert_on_inconclusive",
+        "max_items_per_stream"
+      ],
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "include_pending": {
+          "type": "boolean"
+        },
+        "alert_on_inconclusive": {
+          "type": "boolean"
+        },
+        "max_items_per_stream": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 10000
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated",
+        "pending",
+        "consistent",
+        "inconsistent",
+        "inconclusive",
+        "alerting"
+      ],
+      "properties": {
+        "evaluated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pending": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "consistent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inconsistent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inconclusive": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "alerting": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "alert": {
+      "type": "boolean"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "workspace_id",
+          "agent_id",
+          "playbook_id",
+          "run_status",
+          "replay_state",
+          "issue_count",
+          "issues"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+          },
+          "workspace_id": {
+            "type": "string",
+            "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+          },
+          "agent_id": {
+            "type": "string",
+            "pattern": "^agt_[A-Za-z0-9_-]{6,64}$"
+          },
+          "playbook_id": {
+            "type": "string",
+            "pattern": "^pbk_[A-Za-z0-9_-]{6,64}$"
+          },
+          "run_status": {
+            "$ref": "https://flockmesh.dev/spec/schemas/run-replay-integrity.schema.json#/$defs/run_status"
+          },
+          "replay_state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "consistent",
+              "inconsistent",
+              "inconclusive"
+            ]
+          },
+          "issue_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "replay.partial_evidence",
+                "replay.missing_expected_action_execution",
+                "replay.unexpected_action_execution",
+                "replay.duplicate_action_execution",
+                "replay.unknown_event_action_id",
+                "replay.audit_event_count_mismatch"
+              ]
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}

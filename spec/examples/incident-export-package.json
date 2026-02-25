@@ -1,0 +1,127 @@
+{
+  "version": "v0",
+  "exported_at": "2026-02-23T15:00:00Z",
+  "run_id": "run_weekly_ops_sync_20260222",
+  "workspace_id": "wsp_mindverse_cn",
+  "agent_id": "agt_ops_assistant_v1",
+  "run_status": "waiting_approval",
+  "policy_trace_summary": {
+    "total": 1,
+    "allow": 0,
+    "escalate": 1,
+    "deny": 0,
+    "by_risk_tier": {
+      "R2": 1
+    },
+    "by_effective_source": {
+      "workspace": 1
+    }
+  },
+  "run": {
+    "id": "run_weekly_ops_sync_20260222",
+    "workspace_id": "wsp_mindverse_cn",
+    "agent_id": "agt_ops_assistant_v1",
+    "playbook_id": "pbk_weekly_ops_sync",
+    "trigger": {
+      "type": "manual",
+      "source": "feishu.group:ops-war-room",
+      "actor_id": "usr_yingapple",
+      "at": "2026-02-22T12:30:00Z"
+    },
+    "status": "waiting_approval",
+    "revision": 1,
+    "action_intents": [
+      {
+        "id": "act_send_weekly_summary",
+        "run_id": "run_weekly_ops_sync_20260222",
+        "step_id": "send_summary",
+        "connector_binding_id": "cnb_feishu_ops_primary",
+        "capability": "message.send",
+        "side_effect": "mutation",
+        "idempotency_key": "run_weekly_ops_sync_20260222_send_summary_v1",
+        "risk_hint": "R2",
+        "parameters": {
+          "chat_id": "oc_xxx",
+          "content": "Weekly summary draft..."
+        },
+        "target": {
+          "surface": "feishu.group"
+        }
+      }
+    ],
+    "policy_decisions": [
+      {
+        "id": "pol_approve_send_summary",
+        "run_id": "run_weekly_ops_sync_20260222",
+        "action_intent_id": "act_send_weekly_summary",
+        "decision": "escalate",
+        "risk_tier": "R2",
+        "reason_codes": [
+          "external_message_requires_approval"
+        ],
+        "required_approvals": 1,
+        "policy_trace": {
+          "org_policy": "org_default_safe",
+          "workspace_policy": "workspace_ops_cn",
+          "agent_policy": "agent_ops_assistant",
+          "effective_source": "workspace"
+        },
+        "evaluated_at": "2026-02-22T12:30:05Z"
+      }
+    ],
+    "approval_state": {
+      "act_send_weekly_summary": {
+        "decision_id": "pol_approve_send_summary",
+        "required_approvals": 1,
+        "approved_by": []
+      }
+    },
+    "event_stream_ref": "event://runs/run_weekly_ops_sync_20260222",
+    "audit_ledger_ref": "ledger://runs/run_weekly_ops_sync_20260222",
+    "started_at": "2026-02-22T12:30:00Z"
+  },
+  "evidence": {
+    "events": {
+      "total": 1,
+      "exported": 1,
+      "truncated": false,
+      "items": [
+        {
+          "id": "evt_run_created_1",
+          "run_id": "run_weekly_ops_sync_20260222",
+          "name": "run.created",
+          "payload": {
+            "run_id": "run_weekly_ops_sync_20260222"
+          },
+          "at": "2026-02-22T12:30:00Z",
+          "persisted_at": "2026-02-22T12:30:00Z"
+        }
+      ]
+    },
+    "audit": {
+      "total": 1,
+      "exported": 1,
+      "truncated": false,
+      "items": [
+        {
+          "id": "aud_run_created_1",
+          "run_id": "run_weekly_ops_sync_20260222",
+          "event_type": "run.created",
+          "actor": {
+            "type": "user",
+            "id": "usr_yingapple"
+          },
+          "payload_hash": "sha256:17f7de15a9f723f5b8a8a5f20d447ea0cc2c270b9987f4dddaf8f2f6aef299ef",
+          "occurred_at": "2026-02-22T12:30:00Z",
+          "persisted_at": "2026-02-22T12:30:00Z"
+        }
+      ]
+    }
+  },
+  "signature": {
+    "algorithm": "HMAC-SHA256",
+    "key_id": "exp_dev_main_v1",
+    "payload_hash": "sha256:7d22bb8caa8cb6f9f1ba592e6ea4fef27f06093cc0fd0e64ad8f935ecf35ec3a",
+    "signature": "bbdd3066a2d7be5249f03bf4f9fc8a7d3bc8221f700f6081dbf6304e9f0a3ef0"
+  }
+}

@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/run-timeline-diff.schema.json",
+  "title": "RunTimelineDiff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "run_id",
+    "base_run_id",
+    "base_source",
+    "scope",
+    "summary",
+    "diff",
+    "evidence"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "base_run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "base_source": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "auto_previous"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "agent_id",
+        "playbook_id"
+      ],
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+        },
+        "agent_id": {
+          "type": "string",
+          "pattern": "^agt_[A-Za-z0-9_-]{6,64}$"
+        },
+        "playbook_id": {
+          "type": "string",
+          "pattern": "^pbk_[A-Za-z0-9_-]{6,64}$"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current_status",
+        "base_status",
+        "partial",
+        "totals"
+      ],
+      "properties": {
+        "current_status": {
+          "$ref": "#/$defs/run_status"
+        },
+        "base_status": {
+          "$ref": "#/$defs/run_status"
+        },
+        "partial": {
+          "type": "boolean"
+        },
+        "totals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "events",
+            "audit",
+            "action_intents",
+            "policy_decisions"
+          ],
+          "properties": {
+            "events": {
+              "$ref": "#/$defs/delta_metric"
+            },
+            "audit": {
+              "$ref": "#/$defs/delta_metric"
+            },
+            "action_intents": {
+              "$ref": "#/$defs/delta_metric"
+            },
+            "policy_decisions": {
+              "$ref": "#/$defs/delta_metric"
+            }
+          }
+        }
+      }
+    },
+    "diff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_types",
+        "audit_event_types",
+        "action_capabilities",
+        "policy_decisions",
+        "policy_reason_codes"
+      ],
+      "properties": {
+        "event_types": {
+          "$ref": "#/$defs/diff_group"
+        },
+        "audit_event_types": {
+          "$ref": "#/$defs/diff_group"
+        },
+        "action_capabilities": {
+          "$ref": "#/$defs/diff_group"
+        },
+        "policy_decisions": {
+          "$ref": "#/$defs/diff_group"
+        },
+        "policy_reason_codes": {
+          "$ref": "#/$defs/diff_group"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_items_per_stream",
+        "current",
+        "base"
+      ],
+      "properties": {
+        "max_items_per_stream": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 10000
+        },
+        "current": {
+          "$ref": "#/$defs/evidence_pair"
+        },
+        "base": {
+          "$ref": "#/$defs/evidence_pair"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "run_status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "running",
+        "waiting_approval",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "delta_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current",
+        "base",
+        "delta"
+      ],
+      "properties": {
+        "current": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "base": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delta": {
+          "type": "integer"
+        }
+      }
+    },
+    "diff_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "current",
+        "base",
+        "delta"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "current": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "base": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delta": {
+          "type": "integer"
+        }
+      }
+    },
+    "diff_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "truncated",
+        "items"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diff_row"
+          }
+        }
+      }
+    },
+    "evidence_digest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "exported",
+        "truncated"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "events",
+        "audit"
+      ],
+      "properties": {
+        "events": {
+          "$ref": "#/$defs/evidence_digest"
+        },
+        "audit": {
+          "$ref": "#/$defs/evidence_digest"
+        }
+      }
+    }
+  }
+}

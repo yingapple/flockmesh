@@ -1,0 +1,38 @@
+{
+  "status": "simulated",
+  "run_id": "run_simulate_123456",
+  "connector_id": "con_mcp_gateway",
+  "connector_binding_id": "cnb_simulate_123456",
+  "capability": "tool.invoke",
+  "policy_decision": {
+    "id": "pol_5rN2kQ8Mtx",
+    "run_id": "run_simulate_123456",
+    "action_intent_id": "act_xk31vAaQmN",
+    "decision": "allow",
+    "risk_tier": "R0",
+    "reason_codes": [
+      "risk.r0.read_only"
+    ],
+    "required_approvals": 0,
+    "policy_trace": {
+      "org_policy": "org_default_safe",
+      "workspace_policy": "workspace_ops_cn",
+      "agent_policy": "agent_ops_assistant",
+      "effective_source": "agent"
+    },
+    "evaluated_at": "2026-02-22T13:20:00.000Z"
+  },
+  "adapter_preview": {
+    "mode": "simulate",
+    "connector_id": "con_mcp_gateway",
+    "run_id": "run_simulate_123456",
+    "protocol": "mcp",
+    "preview": {
+      "tool_name": "search.docs",
+      "tool_args": {
+        "query": "incident summary"
+      },
+      "estimated_tokens": 400
+    }
+  }
+}

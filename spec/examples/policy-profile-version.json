@@ -1,0 +1,8 @@
+{
+  "version": "v0",
+  "generated_at": "2026-02-24T17:40:00.000Z",
+  "profile_name": "workspace_ops_cn",
+  "rule_count": 2,
+  "document_hash": "sha256:d8bd9689cc3b31d1e8f7ecddf06d44fac4977deca4b991194f47b6670a3cc70a",
+  "file_path": "policies/workspace_ops_cn.policy.json"
+}

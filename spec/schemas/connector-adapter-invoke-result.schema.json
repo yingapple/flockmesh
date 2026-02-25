@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/connector-adapter-invoke-result.schema.json",
+  "title": "ConnectorAdapterInvokeResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "run_id",
+    "connector_id",
+    "connector_binding_id",
+    "capability",
+    "policy_decision",
+    "adapter_result"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "executed",
+        "deduped",
+        "blocked"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "connector_id": {
+      "type": "string",
+      "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+    },
+    "connector_binding_id": {
+      "type": "string",
+      "pattern": "^cnb_[A-Za-z0-9_-]{6,64}$"
+    },
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "policy_decision": {
+      "$ref": "https://flockmesh.dev/spec/schemas/policy-decision.schema.json#"
+    },
+    "adapter_result": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": true
+        },
+        { "type": "null" }
+      ]
+    }
+  }
+}

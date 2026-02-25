@@ -1,0 +1,46 @@
+{
+  "status": "executed",
+  "run_id": "run_invoke_123456",
+  "connector_id": "con_mcp_gateway",
+  "connector_binding_id": "cnb_invoke_123456",
+  "capability": "tool.invoke",
+  "policy_decision": {
+    "id": "pol_9mKd2V8aZe",
+    "run_id": "run_invoke_123456",
+    "action_intent_id": "act_2mKs9dF4vb",
+    "decision": "allow",
+    "risk_tier": "R0",
+    "reason_codes": [
+      "risk.r0.read_only"
+    ],
+    "required_approvals": 0,
+    "policy_trace": {
+      "org_policy": "org_default_safe",
+      "workspace_policy": "workspace_ops_cn",
+      "agent_policy": "agent_ops_assistant",
+      "effective_source": "agent"
+    },
+    "evaluated_at": "2026-02-22T13:20:00.000Z"
+  },
+  "adapter_result": {
+    "action_intent_id": "act_2mKs9dF4vb",
+    "connector_id": "con_mcp_gateway",
+    "connector_binding_id": "cnb_invoke_123456",
+    "capability": "tool.invoke",
+    "status": "executed",
+    "output": {
+      "mode": "invoke",
+      "connector_id": "con_mcp_gateway",
+      "run_id": "run_invoke_123456",
+      "protocol": "mcp",
+      "tx_id": "mcp_tx_2a34f8c9b7cd",
+      "output": {
+        "ok": true,
+        "capability": "tool.invoke",
+        "tool_name": "search.docs",
+        "result_ref": "mcp://result/8ef39d21a2bc"
+      }
+    },
+    "executed_at": "2026-02-22T13:20:05.000Z"
+  }
+}

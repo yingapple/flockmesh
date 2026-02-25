@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Push Guard"
+  short_description: "Enforce yingapple identity and pre-push quality checks"
+  default_prompt: "Prepare this repository for GitHub push using the yingapple account and run required quality gates before pushing."

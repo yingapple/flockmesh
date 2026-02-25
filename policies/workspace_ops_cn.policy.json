@@ -1,0 +1,15 @@
+{
+  "version": "v0",
+  "name": "workspace_ops_cn",
+  "rules": [
+    {
+      "capability": "message.send",
+      "decision": "escalate",
+      "required_approvals": 1
+    },
+    {
+      "capability": "doc.write",
+      "decision": "allow"
+    }
+  ]
+}

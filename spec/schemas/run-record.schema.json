@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/run-record.schema.json",
+  "title": "RunRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "workspace_id",
+    "agent_id",
+    "playbook_id",
+    "trigger",
+    "status",
+    "revision",
+    "approval_state",
+    "event_stream_ref",
+    "audit_ledger_ref",
+    "started_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^agt_[A-Za-z0-9_-]{6,64}$"
+    },
+    "playbook_id": {
+      "type": "string",
+      "pattern": "^pbk_[A-Za-z0-9_-]{6,64}$"
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "source",
+        "actor_id",
+        "at"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "scheduled",
+            "event"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "running",
+        "waiting_approval",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "action_intents": {
+      "type": "array",
+      "items": {
+        "$ref": "https://flockmesh.dev/spec/schemas/action-intent.schema.json#"
+      }
+    },
+    "policy_decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "https://flockmesh.dev/spec/schemas/policy-decision.schema.json#"
+      }
+    },
+    "approval_state": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision_id",
+          "required_approvals",
+          "approved_by"
+        ],
+        "properties": {
+          "decision_id": {
+            "type": "string",
+            "pattern": "^pol_[A-Za-z0-9_-]{6,64}$"
+          },
+          "required_approvals": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "approved_by": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^usr_[A-Za-z0-9_-]{4,64}$"
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "event_stream_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "audit_ledger_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

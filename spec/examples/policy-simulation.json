@@ -1,0 +1,56 @@
+{
+  "run_id": "run_simulate_123456",
+  "policy_context": {
+    "org_policy": "org_default_safe",
+    "workspace_policy": "workspace_ops_cn",
+    "agent_policy": "agent_ops_assistant"
+  },
+  "summary": {
+    "total": 2,
+    "allow": 1,
+    "escalate": 1,
+    "deny": 0,
+    "status": "waiting_approval"
+  },
+  "decisions": [
+    {
+      "id": "pol_9sN8mC4Kxw",
+      "run_id": "run_simulate_123456",
+      "action_intent_id": "act_send_123456",
+      "decision": "escalate",
+      "risk_tier": "R2",
+      "reason_codes": [
+        "risk.r2.requires_approval",
+        "policy.rule.org",
+        "policy.rule.workspace"
+      ],
+      "required_approvals": 1,
+      "policy_trace": {
+        "org_policy": "org_default_safe",
+        "workspace_policy": "workspace_ops_cn",
+        "agent_policy": "agent_ops_assistant",
+        "effective_source": "org"
+      },
+      "evaluated_at": "2026-02-22T11:00:00.000Z"
+    },
+    {
+      "id": "pol_3qR2pL9Vsz",
+      "run_id": "run_simulate_123456",
+      "action_intent_id": "act_calendar_123456",
+      "decision": "allow",
+      "risk_tier": "R1",
+      "reason_codes": [
+        "risk.r1.low_impact",
+        "policy.rule.agent"
+      ],
+      "required_approvals": 0,
+      "policy_trace": {
+        "org_policy": "org_default_safe",
+        "workspace_policy": "workspace_ops_cn",
+        "agent_policy": "agent_ops_assistant",
+        "effective_source": "agent"
+      },
+      "evaluated_at": "2026-02-22T11:00:00.000Z"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": "v0",
+  "connector_id": "con_feishu_official",
+  "name": "Office Chat Connector",
+  "category": "office_channel",
+  "protocol": "http",
+  "trust_level": "standard",
+  "status": "active",
+  "capabilities": [
+    "message.send",
+    "calendar.read",
+    "doc.read",
+    "doc.write"
+  ],
+  "metadata": {
+    "purpose": "Human notification and approval entry surface for office channels."
+  },
+  "attestation": {
+    "algorithm": "HMAC-SHA256",
+    "key_id": "att_dev_main_v1",
+    "payload_hash": "sha256:38a80dd11c3bf7da97dd4c71481f8a21c49815aeff5289ceab54584e3a3ab0a0",
+    "signature": "af4409e9d8d971a892d76c90a1f11a4b321360c5946b67bd5b658d0b34c6e558"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "version": "v0",
+  "generated_at": "2026-02-23T17:20:00Z",
+  "run_id": "run_weekly_ops_sync_20260223",
+  "run_status": "completed",
+  "replay_state": "consistent",
+  "summary": {
+    "expected_action_executions": 1,
+    "observed_action_execution_events": 1,
+    "observed_action_execution_audit": 1,
+    "missing_expected_actions": 0,
+    "unexpected_actions": 0,
+    "duplicate_actions": 0,
+    "unknown_event_action_ids": 0
+  },
+  "expected_actions": [
+    {
+      "action_intent_id": "act_send_weekly_summary",
+      "capability": "message.send",
+      "side_effect": "mutation",
+      "idempotency_key": "run_weekly_ops_sync_20260223_send_summary_v1",
+      "decision_id": "pol_allow_send_summary",
+      "risk_tier": "R2"
+    }
+  ],
+  "observed_actions": [
+    {
+      "action_intent_id": "act_send_weekly_summary",
+      "executions": 1,
+      "expected": true,
+      "capability": "message.send"
+    }
+  ],
+  "missing_actions": [],
+  "unexpected_actions": [],
+  "duplicate_actions": [],
+  "issues": [],
+  "evidence": {
+    "max_items_per_stream": 2000,
+    "events": {
+      "total": 3,
+      "exported": 3,
+      "truncated": false
+    },
+    "audit": {
+      "total": 5,
+      "exported": 5,
+      "truncated": false
+    }
+  }
+}

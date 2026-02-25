@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/connector-health.schema.json",
+  "title": "ConnectorHealthSummary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generated_at",
+    "total",
+    "healthy",
+    "degraded",
+    "items"
+  ],
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "healthy": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "degraded": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connector_id",
+          "status",
+          "manifest_loaded",
+          "attestation_key_id",
+          "attestation_valid",
+          "protocol",
+          "trust_level",
+          "category",
+          "binding_count",
+          "active_binding_count",
+          "drift_count"
+        ],
+        "properties": {
+          "connector_id": {
+            "type": "string",
+            "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded"
+            ]
+          },
+          "manifest_loaded": {
+            "type": "boolean"
+          },
+          "attestation_key_id": {
+            "type": "string"
+          },
+          "attestation_valid": {
+            "type": "boolean"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "trust_level": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "binding_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_binding_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "drift_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

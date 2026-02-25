@@ -1,0 +1,220 @@
+{
+  "version": "v0",
+  "generated_at": "2026-02-23T18:32:00.000Z",
+  "workspace_id": "wsp_mindverse_cn",
+  "kit": {
+    "kit_id": "kit_office_ops_core",
+    "name": "Office Ops Core",
+    "role": "ops_assistant",
+    "description": "Baseline office operations agent with policy-first messaging, docs, calendar, and bridge controls.",
+    "default_policy_profile": "polprof_ops_standard",
+    "default_playbook_id": "pbk_weekly_ops_sync"
+  },
+  "agent_draft": {
+    "workspace_id": "wsp_mindverse_cn",
+    "name": "Ops Blueprint Agent",
+    "role": "ops_assistant",
+    "owners": [
+      "usr_yingapple"
+    ],
+    "default_policy_profile": "polprof_ops_standard",
+    "default_playbook_id": "pbk_weekly_ops_sync"
+  },
+  "connector_plan": {
+    "selected_connector_ids": [
+      "con_feishu_official",
+      "con_mcp_gateway",
+      "con_unknown_bridge"
+    ],
+    "proposed_bindings": [
+      {
+        "connector_id": "con_feishu_official",
+        "status": "ready",
+        "risk_profile": "restricted",
+        "trust_level": "standard",
+        "required_capabilities": [
+          "doc.read",
+          "message.send"
+        ],
+        "optional_capabilities": [
+          "calendar.read",
+          "doc.write"
+        ],
+        "missing_required_capabilities": [],
+        "scopes": [
+          "calendar.read",
+          "doc.read",
+          "doc.write",
+          "message.send"
+        ]
+      },
+      {
+        "connector_id": "con_mcp_gateway",
+        "status": "ready",
+        "risk_profile": "high_control",
+        "trust_level": "high_control",
+        "required_capabilities": [
+          "tool.list",
+          "tool.read"
+        ],
+        "optional_capabilities": [
+          "tool.invoke"
+        ],
+        "missing_required_capabilities": [],
+        "scopes": [
+          "tool.invoke",
+          "tool.list",
+          "tool.read"
+        ]
+      }
+    ],
+    "connectors": [
+      {
+        "connector_id": "con_feishu_official",
+        "status": "ready",
+        "risk_profile": "restricted",
+        "trust_level": "standard",
+        "required_capabilities": [
+          "doc.read",
+          "message.send"
+        ],
+        "optional_capabilities": [
+          "calendar.read",
+          "doc.write"
+        ],
+        "missing_required_capabilities": [],
+        "scopes": [
+          "calendar.read",
+          "doc.read",
+          "doc.write",
+          "message.send"
+        ]
+      },
+      {
+        "connector_id": "con_mcp_gateway",
+        "status": "ready",
+        "risk_profile": "high_control",
+        "trust_level": "high_control",
+        "required_capabilities": [
+          "tool.list",
+          "tool.read"
+        ],
+        "optional_capabilities": [
+          "tool.invoke"
+        ],
+        "missing_required_capabilities": [],
+        "scopes": [
+          "tool.invoke",
+          "tool.list",
+          "tool.read"
+        ]
+      },
+      {
+        "connector_id": "con_unknown_bridge",
+        "status": "manifest_missing",
+        "risk_profile": "standard",
+        "trust_level": "unknown",
+        "required_capabilities": [],
+        "optional_capabilities": [],
+        "missing_required_capabilities": [],
+        "scopes": []
+      }
+    ]
+  },
+  "capability_coverage": {
+    "required_total": 9,
+    "covered_total": 7,
+    "gap_total": 2,
+    "covered_capabilities": [
+      "calendar.read",
+      "doc.read",
+      "doc.write",
+      "message.send",
+      "tool.invoke",
+      "tool.list",
+      "tool.read"
+    ],
+    "missing_capabilities": [
+      "delegation.request",
+      "delegation.status"
+    ]
+  },
+  "policy_projection": {
+    "summary": {
+      "total": 7,
+      "allow": 6,
+      "escalate": 1,
+      "deny": 0
+    },
+    "items": [
+      {
+        "capability": "calendar.read",
+        "side_effect": "none",
+        "risk_hint": "R0",
+        "decision": "allow",
+        "required_approvals": 0,
+        "reason_codes": [
+          "risk.r0.read_only",
+          "policy.rule.agent"
+        ],
+        "effective_source": "agent"
+      },
+      {
+        "capability": "message.send",
+        "side_effect": "mutation",
+        "risk_hint": "R2",
+        "decision": "escalate",
+        "required_approvals": 1,
+        "reason_codes": [
+          "risk.r2.requires_approval",
+          "policy.rule.org",
+          "policy.rule.workspace"
+        ],
+        "effective_source": "org"
+      }
+    ]
+  },
+  "planner_metrics": {
+    "elapsed_ms": 4,
+    "selected_connectors": 3,
+    "proposed_bindings": 2,
+    "evaluated_capabilities": 7,
+    "warnings": 2
+  },
+  "approval_forecast": {
+    "total_actions": 7,
+    "escalated_actions": 1,
+    "denied_actions": 0,
+    "max_required_approvals": 1
+  },
+  "rollout": [
+    {
+      "phase_id": "phase_observe",
+      "title": "Observe First",
+      "focus": "Enable read/list/status capabilities and build trust with zero side effects.",
+      "approval_expectation": "none"
+    },
+    {
+      "phase_id": "phase_coordinate",
+      "title": "Coordinate",
+      "focus": "Enable controlled write/send capabilities with human approval checkpoints.",
+      "approval_expectation": "single"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "blueprint.connector.manifest_missing",
+      "message": "Connector manifest is missing: con_unknown_bridge",
+      "severity": "critical",
+      "connector_id": "con_unknown_bridge",
+      "capability": ""
+    },
+    {
+      "code": "blueprint.goal.capability_uncovered",
+      "message": "Kit goal capability is not covered by selected connectors: delegation.request",
+      "severity": "warning",
+      "connector_id": "",
+      "capability": "delegation.request"
+    }
+  ]
+}

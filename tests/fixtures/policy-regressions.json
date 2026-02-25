@@ -1,0 +1,48 @@
+[
+  {
+    "name": "message.send escalates under default policy stack",
+    "input": {
+      "run_id": "run_fixture_000001",
+      "action_intent": {
+        "id": "act_fixture_send_000001",
+        "capability": "message.send",
+        "risk_hint": "R2",
+        "side_effect": "mutation",
+        "idempotency_key": "fixture_send_000001"
+      },
+      "policy_context": {
+        "org_policy": "org_default_safe",
+        "workspace_policy": "workspace_ops_cn",
+        "agent_policy": "agent_ops_assistant"
+      }
+    },
+    "expect": {
+      "decision": "escalate",
+      "required_approvals": 1,
+      "effective_source": "org"
+    }
+  },
+  {
+    "name": "payment.execute denied by org policy rule",
+    "input": {
+      "run_id": "run_fixture_000002",
+      "action_intent": {
+        "id": "act_fixture_payment_000002",
+        "capability": "payment.execute",
+        "risk_hint": "R1",
+        "side_effect": "mutation",
+        "idempotency_key": "fixture_payment_000002"
+      },
+      "policy_context": {
+        "org_policy": "org_default_safe",
+        "workspace_policy": "workspace_ops_cn",
+        "agent_policy": "agent_ops_assistant"
+      }
+    },
+    "expect": {
+      "decision": "deny",
+      "required_approvals": 0,
+      "effective_source": "org"
+    }
+  }
+]

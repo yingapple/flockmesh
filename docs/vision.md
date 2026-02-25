@@ -1,47 +1,91 @@
-# Vision: Beyond Chat-Centric Collaboration
+# Vision: Agent-Native Organization
 
-## Problem
+## Core Statement
 
-Current enterprise collaboration products optimize for message flow between people. But execution increasingly happens through software and AI agents. Teams now need a native way to:
+The next collaboration platform is not a better chat room.  
+It is an operating framework where humans, agents, and business systems are coordinated by explicit policy and audit.
 
-- Define agent roles
-- Connect agents to internal systems safely
-- Coordinate human and agent work in one operational model
+It should be "new enough to matter" and "grounded enough to adopt now".
 
-## Future Organization Model
+## What Changes
 
-A modern organization will have three layers:
+From old model:
 
-1. Human Layer
-- Strategic judgment
-- Ambiguous decisions
-- High-trust approvals
+- Human messages are the center
+- Integrations are hidden scripts
+- Governance is post-facto
 
-2. Agent Layer
-- Repeatable operations
-- Monitoring and reaction
-- Knowledge retrieval and synthesis
+To new model:
 
-3. System Layer
-- Source systems (CRM/ERP/BI/Support)
-- Tool contracts and APIs
-- Event and state infrastructure
+- Agent execution is the center
+- Connectors are managed contracts
+- Governance is runtime by default
 
-FlockMesh makes these three layers programmable together.
+## Organization Topology
+
+Every organization has three programmable layers:
+
+1. Human layer: strategy, exceptions, trust decisions
+2. Agent layer: repeatable execution, monitoring, synthesis
+3. System layer: source-of-truth data and business APIs
+
+FlockMesh links these layers with minimal primitives.
 
 ## Design Principles
 
-1. Agent Identity First
-Every agent is an addressable org unit with explicit role, permissions, and versioned behavior.
+1. Agent Identity First  
+Each agent is an addressable role with owner, policy, capabilities, and version.
 
-2. Connection as Product
-Integrations are not hidden scripts. They are shared, governed contracts.
+2. Optional Connectivity  
+Users choose which office systems an agent may access. No connector is mandatory.
 
-3. Workflow Over Chat Noise
-Communication is attached to tasks, decisions, and outcomes.
+3. Blueprint Before Provisioning  
+Agent onboarding should start from a role kit and a blueprint preview (capability coverage, policy forecast, approval load) before runtime provisioning.
+Blueprint lint should produce executable remediation plans, not just pass/fail labels.
 
-4. Policy by Default
-No execution without policy checks, least privilege, and traceability.
+4. Channel-Compatible Entry (Optional)  
+Existing channels (Feishu/Slack/Email) are entry surfaces, while execution remains centered on connectors, playbooks, and policy gates.
 
-5. Portable by Standard
-Prefer open standards (MCP, A2A) over closed proprietary lock-in.
+5. Execution Over Conversation  
+Conversation helps, but task execution and decision trace are the product core.
+
+6. Policy Before Side Effects  
+Every external action must pass policy checks before execution.
+
+7. Immutable Audit  
+All executions are replayable with full traceability of who approved what and when.
+
+8. Open Standards  
+MCP for tools and A2A for delegation should be first-class citizens.
+
+9. Fail-Closed Safety  
+When policy or approval is uncertain, default to deny.
+
+## Transition Philosophy
+
+FlockMesh is designed for progressive migration:
+
+- Keep current workflows and bots running.
+- Add policy and audit gates around high-risk actions first.
+- Gradually shift from message-centric operation to playbook-centric execution.
+
+## Product Philosophy
+
+FlockMesh is intentionally narrow.  
+It does not try to replace every collaboration surface at once.  
+It provides a durable core that other products and teams can extend.
+
+## Kernel Discipline
+
+To avoid roadmap sprawl, every new feature must pass three gates:
+
+1. Core leverage  
+It must harden one of the six primitives (`Agent`, `Connector`, `Policy`, `Playbook`, `Run`, `Ledger`).
+
+2. Governance density  
+It must make policy, approval, replay, or audit materially stronger.
+
+3. Migration realism  
+It must reduce integration cost with existing office/agent ecosystems, not create a new closed island.
+
+If an item fails these gates, it belongs in plugin space, not kernel space.

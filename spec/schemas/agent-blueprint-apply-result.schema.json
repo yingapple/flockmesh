@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/agent-blueprint-apply-result.schema.json",
+  "title": "AgentBlueprintApplyResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "workspace_id",
+    "kit_id",
+    "applied",
+    "reused",
+    "created_agent",
+    "created_bindings",
+    "skipped_connectors",
+    "auto_auth_connectors",
+    "warnings",
+    "blueprint"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+    },
+    "kit_id": {
+      "type": "string",
+      "pattern": "^kit_[A-Za-z0-9_-]{4,64}$"
+    },
+    "applied": {
+      "type": "boolean",
+      "const": true
+    },
+    "reused": {
+      "type": "boolean"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^idem_[A-Za-z0-9_-]{8,128}$"
+    },
+    "created_agent": {
+      "$ref": "https://flockmesh.dev/spec/schemas/agent-profile.schema.json#"
+    },
+    "created_bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://flockmesh.dev/spec/schemas/connector-binding.schema.json#"
+      }
+    },
+    "skipped_connectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connector_id",
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "connector_id": {
+            "type": "string",
+            "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "manifest_missing",
+              "no_scope_match",
+              "partial",
+              "ready"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
+      }
+    },
+    "auto_auth_connectors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/warning"
+      }
+    },
+    "blueprint": {
+      "$ref": "https://flockmesh.dev/spec/schemas/agent-blueprint-preview.schema.json#"
+    }
+  },
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "severity",
+        "connector_id",
+        "capability"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ]
+        },
+        "connector_id": {
+          "type": "string"
+        },
+        "capability": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

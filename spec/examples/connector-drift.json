@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-02-22T13:00:00.000Z",
+  "total": 2,
+  "items": [
+    {
+      "binding_id": "cnb_abc123xyz",
+      "connector_id": "con_mcp_gateway",
+      "issue": "scope_not_declared",
+      "unknown_scopes": [
+        "payment.execute"
+      ],
+      "detected_at": "2026-02-22T13:00:00.000Z"
+    },
+    {
+      "binding_id": "cnb_badatt123",
+      "connector_id": "con_a2a_gateway",
+      "issue": "attestation_invalid",
+      "unknown_scopes": [],
+      "detected_at": "2026-02-22T13:00:00.000Z"
+    }
+  ]
+}

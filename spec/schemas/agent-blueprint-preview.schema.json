@@ -1,0 +1,539 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/agent-blueprint-preview.schema.json",
+  "title": "AgentBlueprintPreview",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "workspace_id",
+    "kit",
+    "agent_draft",
+    "connector_plan",
+    "capability_coverage",
+    "policy_projection",
+    "planner_metrics",
+    "approval_forecast",
+    "rollout",
+    "warnings"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+    },
+    "kit": {
+      "$ref": "#/$defs/kit_summary"
+    },
+    "agent_draft": {
+      "$ref": "#/$defs/agent_draft"
+    },
+    "connector_plan": {
+      "$ref": "#/$defs/connector_plan"
+    },
+    "capability_coverage": {
+      "$ref": "#/$defs/capability_coverage"
+    },
+    "policy_projection": {
+      "$ref": "#/$defs/policy_projection"
+    },
+    "planner_metrics": {
+      "$ref": "#/$defs/planner_metrics"
+    },
+    "approval_forecast": {
+      "$ref": "#/$defs/approval_forecast"
+    },
+    "rollout": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rollout_phase"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/warning"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "kit_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kit_id",
+        "name",
+        "role",
+        "description",
+        "default_policy_profile",
+        "default_playbook_id"
+      ],
+      "properties": {
+        "kit_id": {
+          "type": "string",
+          "pattern": "^kit_[A-Za-z0-9_-]{4,64}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "default_policy_profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "default_playbook_id": {
+          "type": "string",
+          "pattern": "^pbk_[A-Za-z0-9_-]{6,64}$"
+        }
+      }
+    },
+    "agent_draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "name",
+        "role",
+        "owners",
+        "default_policy_profile",
+        "default_playbook_id"
+      ],
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "owners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(usr|svc)_[A-Za-z0-9_-]{4,64}$"
+          }
+        },
+        "default_policy_profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "default_playbook_id": {
+          "type": "string",
+          "pattern": "^pbk_[A-Za-z0-9_-]{6,64}$"
+        }
+      }
+    },
+    "connector_plan_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector_id",
+        "status",
+        "risk_profile",
+        "trust_level",
+        "required_capabilities",
+        "optional_capabilities",
+        "missing_required_capabilities",
+        "scopes"
+      ],
+      "properties": {
+        "connector_id": {
+          "type": "string",
+          "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "partial",
+            "manifest_missing",
+            "no_scope_match"
+          ]
+        },
+        "risk_profile": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "restricted",
+            "high_control"
+          ]
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": [
+            "sandbox",
+            "standard",
+            "high_control",
+            "unknown"
+          ]
+        },
+        "required_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "optional_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "missing_required_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        }
+      }
+    },
+    "connector_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected_connector_ids",
+        "proposed_bindings",
+        "connectors"
+      ],
+      "properties": {
+        "selected_connector_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+          }
+        },
+        "proposed_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/connector_plan_item"
+          }
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/connector_plan_item"
+          }
+        }
+      }
+    },
+    "capability_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_total",
+        "covered_total",
+        "gap_total",
+        "covered_capabilities",
+        "missing_capabilities"
+      ],
+      "properties": {
+        "required_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "covered_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gap_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "covered_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "missing_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        }
+      }
+    },
+    "policy_projection_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "side_effect",
+        "risk_hint",
+        "decision",
+        "required_approvals",
+        "reason_codes",
+        "effective_source"
+      ],
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/capability"
+        },
+        "side_effect": {
+          "type": "string",
+          "enum": [
+            "none",
+            "mutation"
+          ]
+        },
+        "risk_hint": {
+          "type": "string",
+          "enum": [
+            "R0",
+            "R1",
+            "R2",
+            "R3"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "escalate",
+            "deny"
+          ]
+        },
+        "required_approvals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "effective_source": {
+          "type": "string",
+          "enum": [
+            "org",
+            "workspace",
+            "agent",
+            "run_override",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "policy_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "items"
+      ],
+      "properties": {
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total",
+            "allow",
+            "escalate",
+            "deny"
+          ],
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "allow": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "escalate": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "deny": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/policy_projection_item"
+          }
+        }
+      }
+    },
+    "approval_forecast": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_actions",
+        "escalated_actions",
+        "denied_actions",
+        "max_required_approvals"
+      ],
+      "properties": {
+        "total_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "escalated_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "denied_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_required_approvals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      }
+    },
+    "planner_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "elapsed_ms",
+        "selected_connectors",
+        "proposed_bindings",
+        "evaluated_capabilities",
+        "warnings"
+      ],
+      "properties": {
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selected_connectors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "proposed_bindings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evaluated_capabilities": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "rollout_phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase_id",
+        "title",
+        "focus",
+        "approval_expectation"
+      ],
+      "properties": {
+        "phase_id": {
+          "type": "string",
+          "pattern": "^phase_[A-Za-z0-9_-]{3,64}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "focus": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "approval_expectation": {
+          "type": "string",
+          "enum": [
+            "none",
+            "single",
+            "single_or_dual",
+            "dual"
+          ]
+        }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "severity",
+        "connector_id",
+        "capability"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ]
+        },
+        "connector_id": {
+          "type": "string"
+        },
+        "capability": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

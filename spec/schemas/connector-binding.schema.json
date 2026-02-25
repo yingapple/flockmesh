@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/connector-binding.schema.json",
+  "title": "ConnectorBinding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "workspace_id",
+    "connector_id",
+    "scopes",
+    "auth_ref",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^cnb_[A-Za-z0-9_-]{6,64}$"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^agt_[A-Za-z0-9_-]{6,64}$"
+    },
+    "connector_id": {
+      "type": "string",
+      "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+    },
+    "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+      },
+      "uniqueItems": true
+    },
+    "auth_ref": {
+      "type": "string",
+      "pattern": "^sec_[A-Za-z0-9_-]{6,64}$"
+    },
+    "risk_profile": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "restricted",
+        "high_control"
+      ],
+      "default": "standard"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "disabled",
+        "rotating"
+      ]
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

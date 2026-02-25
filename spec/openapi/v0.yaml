@@ -1,0 +1,1819 @@
+openapi: 3.1.0
+info:
+  title: FlockMesh Core API
+  version: 0.1.0-draft
+  summary: Agent-native office runtime API contracts
+  description: |
+    Draft API for FlockMesh v0.
+    Safety defaults: policy-gated side effects, fail-closed decisions, immutable audit.
+servers:
+  - url: http://localhost:8080
+    description: Local development gateway
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Service health snapshot
+      responses:
+        "200":
+          description: Health response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok, service, version, now]
+                properties:
+                  ok:
+                    type: boolean
+                  service:
+                    type: string
+                  version:
+                    type: string
+                  now:
+                    type: string
+                    format: date-time
+
+  /v0/agents:
+    get:
+      operationId: listAgentProfiles
+      summary: List agent profiles
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Agent profile list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [total, limit, offset, items]
+                properties:
+                  total:
+                    type: integer
+                    minimum: 0
+                  limit:
+                    type: integer
+                    minimum: 1
+                  offset:
+                    type: integer
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      $ref: ../schemas/agent-profile.schema.json
+    post:
+      operationId: createAgentProfile
+      summary: Create an agent profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, role, owners]
+              properties:
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                role:
+                  type: string
+                owners:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    pattern: ^(usr|svc)_[A-Za-z0-9_-]{4,64}$
+                name:
+                  type: string
+                default_policy_profile:
+                  type: string
+      responses:
+        "201":
+          description: Agent profile created
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-profile.schema.json
+
+  /v0/agents/{agent_id}:
+    get:
+      operationId: getAgentProfile
+      summary: Get an agent profile
+      parameters:
+        - in: path
+          name: agent_id
+          required: true
+          schema:
+            type: string
+            pattern: ^agt_[A-Za-z0-9_-]{6,64}$
+      responses:
+        "200":
+          description: Agent profile
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-profile.schema.json
+
+  /v0/templates/agent-kits:
+    get:
+      operationId: listAgentKits
+      summary: List built-in agent kits for office onboarding
+      responses:
+        "200":
+          description: Agent kit catalog
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-kit-catalog.schema.json
+
+  /v0/agent-blueprints/preview:
+    post:
+      operationId: previewAgentBlueprint
+      summary: Preview an agent blueprint with connector and policy projections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, kit_id, owners]
+              properties:
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                kit_id:
+                  type: string
+                  pattern: ^kit_[A-Za-z0-9_-]{4,64}$
+                owners:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^(usr|svc)_[A-Za-z0-9_-]{4,64}$
+                agent_name:
+                  type: string
+                selected_connector_ids:
+                  type: array
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^con_[A-Za-z0-9_-]{6,64}$
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Agent blueprint preview
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-blueprint-preview.schema.json
+
+  /v0/agent-blueprints/lint:
+    post:
+      operationId: lintAgentBlueprint
+      summary: Lint and explain blueprint readiness, policy risk, and coverage gaps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, kit_id, owners]
+              properties:
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                kit_id:
+                  type: string
+                  pattern: ^kit_[A-Za-z0-9_-]{4,64}$
+                owners:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^(usr|svc)_[A-Za-z0-9_-]{4,64}$
+                agent_name:
+                  type: string
+                selected_connector_ids:
+                  type: array
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^con_[A-Za-z0-9_-]{6,64}$
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Agent blueprint lint report
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-blueprint-lint-report.schema.json
+
+  /v0/agent-blueprints/remediation-plan:
+    post:
+      operationId: planAgentBlueprintRemediation
+      summary: Build executable remediation actions and auto-fix request for blueprint gaps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, kit_id, owners]
+              properties:
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                kit_id:
+                  type: string
+                  pattern: ^kit_[A-Za-z0-9_-]{4,64}$
+                owners:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^(usr|svc)_[A-Za-z0-9_-]{4,64}$
+                agent_name:
+                  type: string
+                selected_connector_ids:
+                  type: array
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^con_[A-Za-z0-9_-]{6,64}$
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Agent blueprint remediation plan
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-blueprint-remediation-plan.schema.json
+
+  /v0/agent-blueprints/apply:
+    post:
+      operationId: applyAgentBlueprint
+      summary: Create an agent and connector bindings from a blueprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, kit_id, owners]
+              properties:
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                kit_id:
+                  type: string
+                  pattern: ^kit_[A-Za-z0-9_-]{4,64}$
+                owners:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^(usr|svc)_[A-Za-z0-9_-]{4,64}$
+                agent_name:
+                  type: string
+                selected_connector_ids:
+                  type: array
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: ^con_[A-Za-z0-9_-]{6,64}$
+                strict_mode:
+                  type: boolean
+                binding_auth_refs:
+                  type: object
+                  additionalProperties:
+                    type: string
+                    pattern: ^sec_[A-Za-z0-9_-]{6,64}$
+                idempotency_key:
+                  type: string
+                  pattern: ^idem_[A-Za-z0-9_-]{8,128}$
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Reused blueprint apply result via idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-blueprint-apply-result.schema.json
+        "201":
+          description: Agent blueprint apply result
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/agent-blueprint-apply-result.schema.json
+
+  /v0/connectors/bindings:
+    get:
+      operationId: listConnectorBindings
+      summary: List connector bindings
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Connector binding list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [total, limit, offset, items]
+                properties:
+                  total:
+                    type: integer
+                    minimum: 0
+                  limit:
+                    type: integer
+                    minimum: 1
+                  offset:
+                    type: integer
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      $ref: ../schemas/connector-binding.schema.json
+    post:
+      operationId: createConnectorBinding
+      summary: Create a connector binding with scoped capabilities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, connector_id, scopes, auth_ref]
+              properties:
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                connector_id:
+                  type: string
+                  pattern: ^con_[A-Za-z0-9_-]{6,64}$
+                agent_id:
+                  type: string
+                  pattern: ^agt_[A-Za-z0-9_-]{6,64}$
+                scopes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$
+                auth_ref:
+                  type: string
+                  pattern: ^sec_[A-Za-z0-9_-]{6,64}$
+      responses:
+        "201":
+          description: Connector binding created
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-binding.schema.json
+        "409":
+          description: Agent workspace does not match binding workspace
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/connectors/manifests:
+    get:
+      operationId: listConnectorManifests
+      summary: List connector manifests by ecosystem category/protocol/trust
+      parameters:
+        - in: query
+          name: category
+          required: false
+          schema:
+            type: string
+            enum: [office_channel, office_system, agent_protocol]
+        - in: query
+          name: protocol
+          required: false
+          schema:
+            type: string
+            enum: [sdk, http, mcp, a2a]
+        - in: query
+          name: trust_level
+          required: false
+          schema:
+            type: string
+            enum: [sandbox, standard, high_control]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Connector manifest list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [total, limit, offset, items]
+                properties:
+                  total:
+                    type: integer
+                    minimum: 0
+                  limit:
+                    type: integer
+                    minimum: 1
+                  offset:
+                    type: integer
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      $ref: ../schemas/connector-manifest.schema.json
+
+  /v0/connectors/health:
+    get:
+      operationId: getConnectorHealth
+      summary: Connector health summary across manifests and active bindings
+      parameters:
+        - in: query
+          name: connector_id
+          required: false
+          schema:
+            type: string
+            pattern: ^con_[A-Za-z0-9_-]{6,64}$
+      responses:
+        "200":
+          description: Connector health report
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-health.schema.json
+
+  /v0/connectors/drift:
+    get:
+      operationId: getConnectorScopeDrift
+      summary: Detect scope drift between connector bindings and declared manifests
+      parameters:
+        - in: query
+          name: connector_id
+          required: false
+          schema:
+            type: string
+            pattern: ^con_[A-Za-z0-9_-]{6,64}$
+      responses:
+        "200":
+          description: Connector scope drift report
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-drift.schema.json
+
+  /v0/connectors/mcp/allowlists:
+    get:
+      operationId: listMcpAllowlists
+      summary: List MCP tool allowlist rules scoped by workspace and optional agent
+      parameters:
+        - in: query
+          name: workspace_id
+          required: false
+          schema:
+            type: string
+            pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: agent_id
+          required: false
+          schema:
+            type: string
+            pattern: ^agt_[A-Za-z0-9_-]{6,64}$
+      responses:
+        "200":
+          description: MCP allowlist documents
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [total, items]
+                properties:
+                  total:
+                    type: integer
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      type: object
+
+  /v0/connectors/rate-limits:
+    get:
+      operationId: getConnectorRateLimits
+      summary: Inspect connector invocation rate-limit policy
+      parameters:
+        - in: query
+          name: connector_id
+          required: false
+          schema:
+            type: string
+            pattern: ^con_[A-Za-z0-9_-]{6,64}$
+      responses:
+        "200":
+          description: Connector rate-limit policy
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/connectors/adapters/{connector_id}/simulate:
+    post:
+      operationId: simulateConnectorAdapter
+      summary: Simulate connector adapter execution under policy controls
+      parameters:
+        - in: path
+          name: connector_id
+          required: true
+          schema:
+            type: string
+            pattern: ^con_[A-Za-z0-9_-]{6,64}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - run_id
+                - workspace_id
+                - agent_id
+                - connector_binding_id
+                - capability
+                - side_effect
+                - risk_hint
+                - parameters
+                - initiated_by
+              properties:
+                run_id:
+                  type: string
+                  pattern: ^run_[A-Za-z0-9_-]{6,64}$
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                agent_id:
+                  type: string
+                  pattern: ^agt_[A-Za-z0-9_-]{6,64}$
+                connector_binding_id:
+                  type: string
+                  pattern: ^cnb_[A-Za-z0-9_-]{6,64}$
+                capability:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$
+                side_effect:
+                  type: string
+                  enum: [none, mutation]
+                risk_hint:
+                  type: string
+                  enum: [R0, R1, R2, R3]
+                idempotency_key:
+                  type: string
+                parameters:
+                  type: object
+                initiated_by:
+                  type: string
+                  pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Simulation result
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-adapter-simulation-result.schema.json
+        "503":
+          description: Simulation failed closed due to adapter timeout
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/connectors/adapters/{connector_id}/invoke:
+    post:
+      operationId: invokeConnectorAdapter
+      summary: Invoke connector adapter with fail-closed policy, allowlist, rate-limit guardrail, bounded retries, and audit
+      parameters:
+        - in: path
+          name: connector_id
+          required: true
+          schema:
+            type: string
+            pattern: ^con_[A-Za-z0-9_-]{6,64}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - run_id
+                - workspace_id
+                - agent_id
+                - connector_binding_id
+                - capability
+                - side_effect
+                - risk_hint
+                - parameters
+                - initiated_by
+              properties:
+                run_id:
+                  type: string
+                  pattern: ^run_[A-Za-z0-9_-]{6,64}$
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                agent_id:
+                  type: string
+                  pattern: ^agt_[A-Za-z0-9_-]{6,64}$
+                connector_binding_id:
+                  type: string
+                  pattern: ^cnb_[A-Za-z0-9_-]{6,64}$
+                capability:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$
+                side_effect:
+                  type: string
+                  enum: [none, mutation]
+                risk_hint:
+                  type: string
+                  enum: [R0, R1, R2, R3]
+                idempotency_key:
+                  type: string
+                parameters:
+                  type: object
+                initiated_by:
+                  type: string
+                  pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Invocation result
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-adapter-invoke-result.schema.json
+        "403":
+          description: Invocation blocked by policy deny or scope boundary
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-adapter-invoke-result.schema.json
+        "409":
+          description: Invocation blocked by escalation or connector consistency checks
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-adapter-invoke-result.schema.json
+        "429":
+          description: Invocation blocked by connector rate-limit guardrail
+          content:
+            application/json:
+              schema:
+                type: object
+        "503":
+          description: Invocation failed closed due to adapter timeout
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/connector-adapter-invoke-result.schema.json
+
+  /v0/policy/profiles:
+    get:
+      operationId: listPolicyProfiles
+      summary: List runtime policy profiles with rule-level summaries
+      responses:
+        "200":
+          description: Policy profile catalog
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-profile-catalog.schema.json
+
+  /v0/policy/profiles/{profile_name}/version:
+    get:
+      operationId: getPolicyProfileVersion
+      summary: Get immutable version snapshot for one policy profile
+      parameters:
+        - in: path
+          name: profile_name
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{2,80}$
+      responses:
+        "200":
+          description: Policy profile version snapshot
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-profile-version.schema.json
+        "404":
+          description: Policy profile not found
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [message]
+                properties:
+                  message:
+                    type: string
+
+  /v0/policy/evaluate:
+    post:
+      operationId: evaluatePolicy
+      summary: Evaluate policy for a proposed action intent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [run_id, action_intent]
+              properties:
+                run_id:
+                  type: string
+                  pattern: ^run_[A-Za-z0-9_-]{6,64}$
+                action_intent:
+                  $ref: ../schemas/action-intent.schema.json
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Policy evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-decision.schema.json
+
+  /v0/policy/patch:
+    post:
+      operationId: patchPolicyProfile
+      summary: Simulate or apply policy profile patch rules with audit trail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [profile_name, mode, patch_rules]
+              properties:
+                profile_name:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]{2,80}$
+                mode:
+                  type: string
+                  enum: [dry_run, apply]
+                patch_rules:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [capability, decision]
+                    properties:
+                      capability:
+                        type: string
+                        pattern: ^(\*|[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+)$
+                      decision:
+                        type: string
+                        enum: [allow, deny, escalate]
+                      required_approvals:
+                        type: integer
+                        minimum: 1
+                        maximum: 5
+                reason:
+                  type: string
+                  maxLength: 320
+                actor_id:
+                  type: string
+                  minLength: 3
+                  maxLength: 128
+                expected_profile_hash:
+                  type: string
+                  pattern: ^sha256:[a-f0-9]{64}$
+              allOf:
+                - if:
+                    properties:
+                      mode:
+                        const: apply
+                  then:
+                    required: [expected_profile_hash]
+      responses:
+        "200":
+          description: Policy patch result
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-profile-patch-result.schema.json
+        "403":
+          description: Patch apply is not authorized for actor/profile
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [message, reason_code]
+                properties:
+                  message:
+                    type: string
+                  reason_code:
+                    type: string
+        "409":
+          description: Patch apply rejected due to policy profile hash mismatch
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [message, expected_profile_hash, current_profile_hash]
+                properties:
+                  message:
+                    type: string
+                  expected_profile_hash:
+                    type: string
+                  current_profile_hash:
+                    type: string
+
+  /v0/policy/patches:
+    get:
+      operationId: listPolicyPatchHistory
+      summary: List policy patch and rollback history
+      parameters:
+        - in: query
+          name: profile_name
+          required: false
+          schema:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{2,80}$
+        - in: query
+          name: operation
+          required: false
+          schema:
+            type: string
+            enum: [patch, rollback]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Policy patch history page
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-patch-history.schema.json
+
+  /v0/policy/patches/export:
+    get:
+      operationId: exportPolicyPatchHistory
+      summary: Export policy patch/rollback history with signature
+      parameters:
+        - in: query
+          name: profile_name
+          required: false
+          schema:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{2,80}$
+        - in: query
+          name: operation
+          required: false
+          schema:
+            type: string
+            enum: [patch, rollback]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Signed policy patch history export package
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-patch-history-export-package.schema.json
+
+  /v0/policy/rollback:
+    post:
+      operationId: rollbackPolicyProfile
+      summary: Restore a policy profile snapshot from patch history
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [profile_name, mode]
+              properties:
+                profile_name:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]{2,80}$
+                mode:
+                  type: string
+                  enum: [dry_run, apply]
+                target_patch_id:
+                  type: string
+                  pattern: ^pph_[A-Za-z0-9_-]{6,64}$
+                target_state:
+                  type: string
+                  enum: [before, after]
+                reason:
+                  type: string
+                  maxLength: 320
+                actor_id:
+                  type: string
+                  minLength: 3
+                  maxLength: 128
+                expected_profile_hash:
+                  type: string
+                  pattern: ^sha256:[a-f0-9]{64}$
+              allOf:
+                - if:
+                    properties:
+                      mode:
+                        const: apply
+                  then:
+                    required: [expected_profile_hash]
+      responses:
+        "200":
+          description: Policy rollback result
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-profile-patch-result.schema.json
+        "403":
+          description: Rollback apply is not authorized for actor/profile
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [message, reason_code]
+                properties:
+                  message:
+                    type: string
+                  reason_code:
+                    type: string
+        "409":
+          description: Rollback apply rejected due to policy profile hash mismatch
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [message, expected_profile_hash, current_profile_hash]
+                properties:
+                  message:
+                    type: string
+                  expected_profile_hash:
+                    type: string
+                  current_profile_hash:
+                    type: string
+
+  /v0/policy/simulate:
+    post:
+      operationId: simulatePolicyBatch
+      summary: Simulate policy decisions for a batch of action intents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [run_id, action_intents]
+              properties:
+                run_id:
+                  type: string
+                  pattern: ^run_[A-Za-z0-9_-]{6,64}$
+                action_intents:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: ../schemas/action-intent.schema.json
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "200":
+          description: Policy simulation summary and per-action decisions
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/policy-simulation.schema.json
+
+  /v0/runs:
+    get:
+      operationId: listRuns
+      summary: List runs (optional status filter)
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [accepted, running, waiting_approval, completed, failed, cancelled]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Run list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [total, limit, offset, items]
+                properties:
+                  total:
+                    type: integer
+                    minimum: 0
+                  limit:
+                    type: integer
+                    minimum: 1
+                  offset:
+                    type: integer
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      $ref: ../schemas/run-record.schema.json
+    post:
+      operationId: createRun
+      summary: Create and start a run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, agent_id, playbook_id, trigger]
+              properties:
+                workspace_id:
+                  type: string
+                  pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+                agent_id:
+                  type: string
+                  pattern: ^agt_[A-Za-z0-9_-]{6,64}$
+                playbook_id:
+                  type: string
+                  pattern: ^pbk_[A-Za-z0-9_-]{6,64}$
+                trigger:
+                  type: object
+                  additionalProperties: false
+                  required: [type, source, actor_id, at]
+                  properties:
+                    type:
+                      type: string
+                      enum: [manual, scheduled, event]
+                    source:
+                      type: string
+                    actor_id:
+                      type: string
+                    at:
+                      type: string
+                      format: date-time
+                policy_context:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    org_policy:
+                      type: string
+                    workspace_policy:
+                      type: string
+                    agent_policy:
+                      type: string
+                    run_override:
+                      type: string
+      responses:
+        "202":
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/run-record.schema.json
+        "409":
+          description: Agent workspace does not match run workspace
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/runs/{run_id}:
+    get:
+      operationId: getRun
+      summary: Get run status and references
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+      responses:
+        "200":
+          description: Run record
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/run-record.schema.json
+
+  /v0/runs/{run_id}/approvals:
+    post:
+      operationId: resolveRunApproval
+      summary: Resolve a pending approval for a run
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action_intent_id, approved, approved_by, expected_revision]
+              properties:
+                action_intent_id:
+                  type: string
+                  pattern: ^act_[A-Za-z0-9_-]{6,64}$
+                approved:
+                  type: boolean
+                approved_by:
+                  type: string
+                  pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+                expected_revision:
+                  type: integer
+                  minimum: 1
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Updated run state
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, run]
+                properties:
+                  status:
+                    type: string
+                  run:
+                    $ref: ../schemas/run-record.schema.json
+
+  /v0/runs/{run_id}/a2a/request:
+    post:
+      operationId: requestA2aDelegation
+      summary: Create A2A delegation request under run governance
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [connector_binding_id, initiated_by, target_agent, task_type]
+              properties:
+                connector_binding_id:
+                  type: string
+                  pattern: ^cnb_[A-Za-z0-9_-]{6,64}$
+                initiated_by:
+                  type: string
+                  pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+                target_agent:
+                  type: string
+                task_type:
+                  type: string
+                payload:
+                  type: object
+                risk_hint:
+                  type: string
+                  enum: [R0, R1, R2, R3]
+                idempotency_key:
+                  type: string
+                policy_context:
+                  type: object
+      responses:
+        "200":
+          description: A2A request invocation result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/runs/{run_id}/a2a/{delegation_id}/status:
+    post:
+      operationId: getA2aDelegationStatus
+      summary: Query A2A delegation status under run governance
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: path
+          name: delegation_id
+          required: true
+          schema:
+            type: string
+            pattern: ^dlg_[A-Za-z0-9_-]{6,64}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [connector_binding_id, initiated_by]
+              properties:
+                connector_binding_id:
+                  type: string
+                  pattern: ^cnb_[A-Za-z0-9_-]{6,64}$
+                initiated_by:
+                  type: string
+                  pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+                risk_hint:
+                  type: string
+                  enum: [R0, R1, R2, R3]
+                policy_context:
+                  type: object
+      responses:
+        "200":
+          description: A2A status invocation result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/runs/{run_id}/a2a/{delegation_id}/cancel:
+    post:
+      operationId: cancelA2aDelegation
+      summary: Cancel A2A delegation under run governance
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: path
+          name: delegation_id
+          required: true
+          schema:
+            type: string
+            pattern: ^dlg_[A-Za-z0-9_-]{6,64}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [connector_binding_id, initiated_by]
+              properties:
+                connector_binding_id:
+                  type: string
+                  pattern: ^cnb_[A-Za-z0-9_-]{6,64}$
+                initiated_by:
+                  type: string
+                  pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+                reason:
+                  type: string
+                risk_hint:
+                  type: string
+                  enum: [R0, R1, R2, R3]
+                idempotency_key:
+                  type: string
+                policy_context:
+                  type: object
+      responses:
+        "200":
+          description: A2A cancel invocation result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/runs/{run_id}/cancel:
+    post:
+      operationId: cancelRun
+      summary: Cancel a non-terminal run
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cancelled_by, expected_revision]
+              properties:
+                cancelled_by:
+                  type: string
+                  pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+                expected_revision:
+                  type: integer
+                  minimum: 1
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Updated run state
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, run]
+                properties:
+                  status:
+                    type: string
+                  run:
+                    $ref: ../schemas/run-record.schema.json
+
+  /v0/runs/{run_id}/audit:
+    get:
+      operationId: listRunAuditEntries
+      summary: List immutable audit entries for a run
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [run_id, total, limit, offset, items]
+                properties:
+                  run_id:
+                    type: string
+                  total:
+                    type: integer
+                    minimum: 0
+                  limit:
+                    type: integer
+                    minimum: 1
+                  offset:
+                    type: integer
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      $ref: ../schemas/audit-entry.schema.json
+
+  /v0/runs/{run_id}/events:
+    get:
+      operationId: listRunEvents
+      summary: List operational event stream entries for a run
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Event stream entries
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [run_id, total, limit, offset, items]
+                properties:
+                  run_id:
+                    type: string
+                  total:
+                    type: integer
+                    minimum: 0
+                  limit:
+                    type: integer
+                    minimum: 1
+                  offset:
+                    type: integer
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      type: object
+
+  /v0/runs/{run_id}/timeline-diff:
+    get:
+      operationId: diffRunTimeline
+      summary: Compare one run timeline against a base run in same workspace/agent/playbook scope
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: base_run_id
+          required: false
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: max_items_per_stream
+          required: false
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 10000
+        - in: query
+          name: sample_limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Run timeline diff package
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/run-timeline-diff.schema.json
+        "404":
+          description: Run or base run not found
+          content:
+            application/json:
+              schema:
+                type: object
+        "409":
+          description: Base run does not match workspace/agent/playbook scope
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/runs/{run_id}/replay-integrity:
+    get:
+      operationId: checkRunReplayIntegrity
+      summary: Validate run replay integrity from policy decisions against event/audit ledger
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: max_items_per_stream
+          required: false
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 10000
+        - in: query
+          name: sample_limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Replay integrity package
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/run-replay-integrity.schema.json
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/runs/{run_id}/replay-export:
+    get:
+      operationId: exportRunReplayPackage
+      summary: Export signed replay integrity package for external audit
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: max_items_per_stream
+          required: false
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 10000
+        - in: query
+          name: sample_limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Replay export package
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/run-replay-export-package.schema.json
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/monitoring/replay-drift:
+    get:
+      operationId: getReplayDriftSummary
+      summary: Replay drift monitoring summary across recent runs
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: max_items_per_stream
+          required: false
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 10000
+        - in: query
+          name: sample_limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: include_pending
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: alert_on_inconclusive
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Replay drift summary
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/replay-drift-summary.schema.json
+
+  /v0/runs/{run_id}/incident-export:
+    get:
+      operationId: exportRunIncidentPackage
+      summary: Export run evidence package (run, policy trace summary, events, audit)
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: ^run_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: max_items_per_stream
+          required: false
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 10000
+      responses:
+        "200":
+          description: Incident export package
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/incident-export-package.schema.json

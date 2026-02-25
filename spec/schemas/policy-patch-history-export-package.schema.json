@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/policy-patch-history-export-package.schema.json",
+  "title": "PolicyPatchHistoryExportPackage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "exported_at",
+    "filters",
+    "history",
+    "signature"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_name",
+        "operation",
+        "limit",
+        "offset"
+      ],
+      "properties": {
+        "profile_name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "operation": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "limit",
+        "offset",
+        "items"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://flockmesh.dev/spec/schemas/policy-patch-history.schema.json#/$defs/history_item"
+          }
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "payload_hash",
+        "signature"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "HMAC-SHA256"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^exp_[A-Za-z0-9_-]{4,64}$"
+        },
+        "payload_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

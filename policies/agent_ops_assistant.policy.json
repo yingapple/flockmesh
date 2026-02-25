@@ -1,0 +1,14 @@
+{
+  "version": "v0",
+  "name": "agent_ops_assistant",
+  "rules": [
+    {
+      "capability": "calendar.read",
+      "decision": "allow"
+    },
+    {
+      "capability": "jira.read",
+      "decision": "allow"
+    }
+  ]
+}

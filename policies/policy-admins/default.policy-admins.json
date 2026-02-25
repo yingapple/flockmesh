@@ -1,0 +1,12 @@
+{
+  "version": "v0",
+  "global_admins": [
+    "usr_policy_admin",
+    "usr_yingapple"
+  ],
+  "profile_admins": {
+    "workspace_ops_cn": [
+      "usr_ops_reviewer"
+    ]
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "version": "v0",
+  "generated_at": "2026-02-23T20:10:00.000Z",
+  "workspace_id": "wsp_mindverse_cn",
+  "kit_id": "kit_office_ops_core",
+  "summary": {
+    "status": "warn",
+    "score": 86,
+    "total_checks": 4,
+    "passed": 2,
+    "warned": 2,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "id": "connector_manifest_integrity",
+      "title": "Connector Manifest Integrity",
+      "status": "pass",
+      "score_impact": 0,
+      "detail": "All selected connectors have manifests."
+    },
+    {
+      "id": "capability_coverage",
+      "title": "Capability Coverage",
+      "status": "warn",
+      "score_impact": -8,
+      "detail": "2 goal capabilities are not covered by selected connectors."
+    },
+    {
+      "id": "policy_decision_safety",
+      "title": "Policy Decision Safety",
+      "status": "warn",
+      "score_impact": -6,
+      "detail": "1 capabilities require approval."
+    },
+    {
+      "id": "warning_budget",
+      "title": "Warning Budget",
+      "status": "pass",
+      "score_impact": 0,
+      "detail": "2 warning-level issues found."
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "close_capability_gap",
+      "message": "Add connectors or adjust kit connector selection to close capability coverage gaps.",
+      "priority": "medium"
+    },
+    {
+      "id": "prepare_approval_capacity",
+      "message": "Prepare approval workload and approver rota for escalated capabilities.",
+      "priority": "medium"
+    }
+  ],
+  "preview_ref": {
+    "capability_coverage": {
+      "required_total": 9,
+      "covered_total": 7,
+      "gap_total": 2
+    },
+    "policy_projection_summary": {
+      "total": 7,
+      "allow": 6,
+      "escalate": 1,
+      "deny": 0
+    },
+    "approval_forecast": {
+      "total_actions": 7,
+      "escalated_actions": 1,
+      "denied_actions": 0,
+      "max_required_approvals": 1
+    },
+    "planner_metrics": {
+      "elapsed_ms": 3,
+      "selected_connectors": 3,
+      "proposed_bindings": 2,
+      "evaluated_capabilities": 7,
+      "warnings": 2
+    },
+    "warning_count": 2
+  }
+}

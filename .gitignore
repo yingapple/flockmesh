@@ -6,3 +6,16 @@ dist/
 build/
 coverage/
 *.log
+
+data/audit/*.jsonl
+data/events/*.jsonl
+!data/audit/.gitkeep
+!data/events/.gitkeep
+
+docs/marketing/
+
+data/*.db
+data/policy-patches/*.jsonl
+!data/policy-patches/.gitkeep
+
+policies/policy_*_mm*.policy.json

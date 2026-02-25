@@ -1,0 +1,23 @@
+{
+  "version": "v0",
+  "connector_id": "con_a2a_gateway",
+  "name": "A2A Delegation Gateway",
+  "category": "agent_protocol",
+  "protocol": "a2a",
+  "trust_level": "high_control",
+  "status": "preview",
+  "capabilities": [
+    "delegation.request",
+    "delegation.status",
+    "delegation.cancel"
+  ],
+  "metadata": {
+    "purpose": "Delegate tasks across external agent runtimes with local policy/audit gates."
+  },
+  "attestation": {
+    "algorithm": "HMAC-SHA256",
+    "key_id": "att_dev_main_v1",
+    "payload_hash": "sha256:2765a83c99da551d5681f169b90830b0ec207480eabc1fe6bfa149d5a9ecc471",
+    "signature": "f532ab64d2c54398d1f33ac478381207fb80011e06a4825975ee4bbd263daaab"
+  }
+}

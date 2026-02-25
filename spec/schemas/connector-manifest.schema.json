@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/connector-manifest.schema.json",
+  "title": "ConnectorManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "connector_id",
+    "name",
+    "category",
+    "protocol",
+    "trust_level",
+    "status",
+    "capabilities",
+    "attestation",
+    "metadata"
+  ],
+  "properties": {
+    "connector_id": {
+      "type": "string",
+      "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "office_channel",
+        "office_system",
+        "agent_protocol"
+      ]
+    },
+    "protocol": {
+      "type": "string",
+      "enum": [
+        "sdk",
+        "http",
+        "mcp",
+        "a2a"
+      ]
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": [
+        "sandbox",
+        "standard",
+        "high_control"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "preview",
+        "deprecated"
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+      },
+      "uniqueItems": true
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "payload_hash",
+        "signature",
+        "verified"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "HMAC-SHA256"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^att_[A-Za-z0-9_-]{4,64}$"
+        },
+        "payload_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

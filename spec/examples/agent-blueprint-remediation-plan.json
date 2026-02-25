@@ -1,0 +1,130 @@
+{
+  "version": "v0",
+  "generated_at": "2026-02-23T20:20:00.000Z",
+  "workspace_id": "wsp_mindverse_cn",
+  "kit_id": "kit_office_ops_core",
+  "summary": {
+    "status_before": "warn",
+    "score_before": 86,
+    "status_after_estimate": "warn",
+    "score_after_estimate": 94,
+    "expected_delta": 8
+  },
+  "connector_actions": {
+    "suggested_connector_ids": [
+      "con_a2a_gateway",
+      "con_feishu_official",
+      "con_mcp_gateway"
+    ],
+    "add": [
+      {
+        "connector_id": "con_a2a_gateway",
+        "reason": "capability_gap",
+        "covered_capabilities": [
+          "delegation.request",
+          "delegation.status"
+        ],
+        "trust_level": "high_control",
+        "category": "agent_protocol"
+      }
+    ],
+    "remove": []
+  },
+  "policy_candidates": {
+    "context": {
+      "org_policy": "org_default_safe",
+      "workspace_policy": "workspace_ops_cn",
+      "agent_policy": "agent_ops_assistant",
+      "run_override": ""
+    },
+    "items": [
+      {
+        "candidate_id": "cand_approval_capacity",
+        "type": "approval_capacity",
+        "target_capabilities": [
+          "message.send"
+        ],
+        "rationale": "Escalated actions are expected and should be covered by approval rota.",
+        "risk_tradeoff": "medium",
+        "suggested_run_override": "",
+        "applicability": "informational",
+        "target_profile": "",
+        "patch_rules": []
+      }
+    ]
+  },
+  "auto_fix_request": {
+    "workspace_id": "wsp_mindverse_cn",
+    "kit_id": "kit_office_ops_core",
+    "owners": [
+      "usr_yingapple"
+    ],
+    "agent_name": "Ops Blueprint Agent",
+    "selected_connector_ids": [
+      "con_a2a_gateway",
+      "con_feishu_official",
+      "con_mcp_gateway"
+    ],
+    "policy_context": {
+      "org_policy": "org_default_safe",
+      "workspace_policy": "workspace_ops_cn",
+      "agent_policy": "agent_ops_assistant",
+      "run_override": ""
+    }
+  },
+  "auto_fix_preview": {
+    "capability_coverage": {
+      "required_total": 9,
+      "covered_total": 9,
+      "gap_total": 0,
+      "covered_capabilities": [
+        "calendar.read",
+        "delegation.request",
+        "delegation.status",
+        "doc.read",
+        "doc.write",
+        "message.send",
+        "tool.invoke",
+        "tool.list",
+        "tool.read"
+      ],
+      "missing_capabilities": []
+    },
+    "policy_projection_summary": {
+      "total": 9,
+      "allow": 8,
+      "escalate": 1,
+      "deny": 0
+    },
+    "approval_forecast": {
+      "total_actions": 9,
+      "escalated_actions": 1,
+      "denied_actions": 0,
+      "max_required_approvals": 1
+    },
+    "lint_summary": {
+      "status": "warn",
+      "score": 94,
+      "total_checks": 4,
+      "passed": 3,
+      "warned": 1,
+      "failed": 0
+    }
+  },
+  "unresolved_capabilities": [],
+  "planner_metrics": {
+    "elapsed_ms": 2
+  },
+  "recommendations": [
+    {
+      "id": "add_recommended_connectors",
+      "message": "Add 1 connectors to close capability gaps.",
+      "priority": "medium"
+    },
+    {
+      "id": "policy_candidate_review",
+      "message": "Review policy candidates before production apply.",
+      "priority": "medium"
+    }
+  ]
+}

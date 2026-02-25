@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/agent-blueprint-lint-report.schema.json",
+  "title": "AgentBlueprintLintReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "workspace_id",
+    "kit_id",
+    "summary",
+    "checks",
+    "recommendations",
+    "preview_ref"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^wsp_[A-Za-z0-9_-]{6,64}$"
+    },
+    "kit_id": {
+      "type": "string",
+      "pattern": "^kit_[A-Za-z0-9_-]{4,64}$"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "score",
+        "total_checks",
+        "passed",
+        "warned",
+        "failed"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pass", "warn", "fail"]
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "total_checks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/recommendation"
+      }
+    },
+    "preview_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_coverage",
+        "policy_projection_summary",
+        "approval_forecast",
+        "planner_metrics",
+        "warning_count"
+      ],
+      "properties": {
+        "capability_coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required_total", "covered_total", "gap_total"],
+          "properties": {
+            "required_total": { "type": "integer", "minimum": 0 },
+            "covered_total": { "type": "integer", "minimum": 0 },
+            "gap_total": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "policy_projection_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "allow", "escalate", "deny"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "allow": { "type": "integer", "minimum": 0 },
+            "escalate": { "type": "integer", "minimum": 0 },
+            "deny": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "approval_forecast": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total_actions",
+            "escalated_actions",
+            "denied_actions",
+            "max_required_approvals"
+          ],
+          "properties": {
+            "total_actions": { "type": "integer", "minimum": 0 },
+            "escalated_actions": { "type": "integer", "minimum": 0 },
+            "denied_actions": { "type": "integer", "minimum": 0 },
+            "max_required_approvals": { "type": "integer", "minimum": 0, "maximum": 5 }
+          }
+        },
+        "planner_metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "elapsed_ms",
+            "selected_connectors",
+            "proposed_bindings",
+            "evaluated_capabilities",
+            "warnings"
+          ],
+          "properties": {
+            "elapsed_ms": { "type": "integer", "minimum": 0 },
+            "selected_connectors": { "type": "integer", "minimum": 0 },
+            "proposed_bindings": { "type": "integer", "minimum": 0 },
+            "evaluated_capabilities": { "type": "integer", "minimum": 0 },
+            "warnings": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "warning_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status", "score_impact", "detail"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "status": { "type": "string", "enum": ["pass", "warn", "fail"] },
+        "score_impact": { "type": "integer", "minimum": -100, "maximum": 0 },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 320 }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "message", "priority"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 320 },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] }
+      }
+    }
+  }
+}

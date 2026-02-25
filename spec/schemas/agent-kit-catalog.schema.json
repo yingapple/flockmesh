@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/agent-kit-catalog.schema.json",
+  "title": "AgentKitCatalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "total",
+    "items"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/agent_kit"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "connector_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector_id",
+        "required_capabilities",
+        "optional_capabilities",
+        "risk_profile"
+      ],
+      "properties": {
+        "connector_id": {
+          "type": "string",
+          "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+        },
+        "required_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "optional_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "risk_profile": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "restricted",
+            "high_control"
+          ]
+        }
+      }
+    },
+    "rollout_phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase_id",
+        "title",
+        "focus",
+        "approval_expectation"
+      ],
+      "properties": {
+        "phase_id": {
+          "type": "string",
+          "pattern": "^phase_[A-Za-z0-9_-]{3,64}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "focus": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "approval_expectation": {
+          "type": "string",
+          "enum": [
+            "none",
+            "single",
+            "single_or_dual",
+            "dual"
+          ]
+        }
+      }
+    },
+    "agent_kit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kit_id",
+        "name",
+        "description",
+        "role",
+        "default_policy_profile",
+        "default_playbook_id",
+        "capability_goals",
+        "connector_candidates",
+        "rollout"
+      ],
+      "properties": {
+        "kit_id": {
+          "type": "string",
+          "pattern": "^kit_[A-Za-z0-9_-]{4,64}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "default_policy_profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "default_playbook_id": {
+          "type": "string",
+          "pattern": "^pbk_[A-Za-z0-9_-]{6,64}$"
+        },
+        "capability_goals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "connector_candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/connector_candidate"
+          }
+        },
+        "rollout": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/rollout_phase"
+          }
+        }
+      }
+    }
+  }
+}

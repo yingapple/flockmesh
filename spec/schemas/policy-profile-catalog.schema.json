@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/policy-profile-catalog.schema.json",
+  "title": "PolicyProfileCatalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "total",
+    "items"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profile_item"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "pattern": "^(\\*|[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+)$"
+    },
+    "policy_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "decision",
+        "required_approvals"
+      ],
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/capability"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "deny",
+            "escalate"
+          ]
+        },
+        "required_approvals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      }
+    },
+    "decision_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow",
+        "escalate",
+        "deny"
+      ],
+      "properties": {
+        "allow": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "escalate": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deny": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "profile_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_name",
+        "rule_count",
+        "decision_summary",
+        "rules"
+      ],
+      "properties": {
+        "profile_name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,80}$"
+        },
+        "rule_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "decision_summary": {
+          "$ref": "#/$defs/decision_summary"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/policy_rule"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/run-replay-integrity.schema.json",
+  "title": "RunReplayIntegrity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "run_id",
+    "run_status",
+    "replay_state",
+    "summary",
+    "expected_actions",
+    "observed_actions",
+    "missing_actions",
+    "unexpected_actions",
+    "duplicate_actions",
+    "issues",
+    "evidence"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "run_status": {
+      "$ref": "#/$defs/run_status"
+    },
+    "replay_state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "consistent",
+        "inconsistent",
+        "inconclusive"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_action_executions",
+        "observed_action_execution_events",
+        "observed_action_execution_audit",
+        "missing_expected_actions",
+        "unexpected_actions",
+        "duplicate_actions",
+        "unknown_event_action_ids"
+      ],
+      "properties": {
+        "expected_action_executions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observed_action_execution_events": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observed_action_execution_audit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_expected_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unexpected_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicate_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_event_action_ids": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "expected_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/expected_action"
+      }
+    },
+    "observed_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observed_action"
+      }
+    },
+    "missing_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/expected_action"
+      }
+    },
+    "unexpected_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/action_count"
+      }
+    },
+    "duplicate_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/action_count"
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "replay.partial_evidence",
+          "replay.missing_expected_action_execution",
+          "replay.unexpected_action_execution",
+          "replay.duplicate_action_execution",
+          "replay.unknown_event_action_id",
+          "replay.audit_event_count_mismatch"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_items_per_stream",
+        "events",
+        "audit"
+      ],
+      "properties": {
+        "max_items_per_stream": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 10000
+        },
+        "events": {
+          "$ref": "#/$defs/evidence_digest"
+        },
+        "audit": {
+          "$ref": "#/$defs/evidence_digest"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "run_status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "running",
+        "waiting_approval",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "expected_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_intent_id",
+        "capability",
+        "side_effect",
+        "idempotency_key",
+        "decision_id",
+        "risk_tier"
+      ],
+      "properties": {
+        "action_intent_id": {
+          "type": "string",
+          "pattern": "^act_[A-Za-z0-9_-]{6,64}$"
+        },
+        "capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+        },
+        "side_effect": {
+          "type": "string",
+          "enum": [
+            "none",
+            "mutation"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "decision_id": {
+          "type": "string",
+          "pattern": "^pol_[A-Za-z0-9_-]{6,64}$"
+        },
+        "risk_tier": {
+          "type": "string",
+          "enum": [
+            "R0",
+            "R1",
+            "R2",
+            "R3"
+          ]
+        }
+      }
+    },
+    "action_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_intent_id",
+        "executions"
+      ],
+      "properties": {
+        "action_intent_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "executions": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "observed_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_intent_id",
+        "executions",
+        "expected",
+        "capability"
+      ],
+      "properties": {
+        "action_intent_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "executions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expected": {
+          "type": "boolean"
+        },
+        "capability": {
+          "type": "string",
+          "maxLength": 160
+        }
+      }
+    },
+    "evidence_digest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "exported",
+        "truncated"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

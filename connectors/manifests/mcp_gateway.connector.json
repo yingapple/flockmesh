@@ -1,0 +1,23 @@
+{
+  "version": "v0",
+  "connector_id": "con_mcp_gateway",
+  "name": "MCP Gateway",
+  "category": "agent_protocol",
+  "protocol": "mcp",
+  "trust_level": "high_control",
+  "status": "active",
+  "capabilities": [
+    "tool.list",
+    "tool.read",
+    "tool.invoke"
+  ],
+  "metadata": {
+    "purpose": "Bridge runtime actions to MCP-compatible tool providers."
+  },
+  "attestation": {
+    "algorithm": "HMAC-SHA256",
+    "key_id": "att_dev_main_v1",
+    "payload_hash": "sha256:4fad04e73d700bf040fc9d151106ce9348e3eacfdae2eb913c2ef73a45c94414",
+    "signature": "84fa7342b47b68837af34b6b9830ef55823fe661ec38bf9e9545db9226ea1669"
+  }
+}

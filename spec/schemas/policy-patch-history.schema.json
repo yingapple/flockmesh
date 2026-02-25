@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/policy-patch-history.schema.json",
+  "title": "PolicyPatchHistory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "total",
+    "limit",
+    "offset",
+    "items"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/history_item"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "pattern": "^(\\*|[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+)$"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_rules_before",
+        "total_rules_after",
+        "patch_rules",
+        "added",
+        "updated",
+        "removed",
+        "unchanged"
+      ],
+      "properties": {
+        "total_rules_before": { "type": "integer", "minimum": 0 },
+        "total_rules_after": { "type": "integer", "minimum": 0 },
+        "patch_rules": { "type": "integer", "minimum": 0 },
+        "added": { "type": "integer", "minimum": 0 },
+        "updated": { "type": "integer", "minimum": 0 },
+        "removed": { "type": "integer", "minimum": 0 },
+        "unchanged": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "added_capabilities",
+        "updated_capabilities",
+        "removed_capabilities",
+        "unchanged_capabilities"
+      ],
+      "properties": {
+        "added_capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capability" }
+        },
+        "updated_capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capability" }
+        },
+        "removed_capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capability" }
+        },
+        "unchanged_capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capability" }
+        }
+      }
+    },
+    "history_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch_id",
+        "profile_name",
+        "operation",
+        "rollback_target_patch_id",
+        "rollback_target_state",
+        "actor_id",
+        "reason",
+        "applied_at",
+        "file_path",
+        "summary",
+        "changes"
+      ],
+      "properties": {
+        "patch_id": {
+          "type": "string",
+          "pattern": "^pph_[A-Za-z0-9_-]{6,64}$"
+        },
+        "profile_name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,80}$"
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "patch",
+            "rollback"
+          ]
+        },
+        "rollback_target_patch_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "rollback_target_state": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "applied_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "file_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "before_profile_hash": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "after_profile_hash": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "changes": {
+          "$ref": "#/$defs/changes"
+        }
+      }
+    }
+  }
+}

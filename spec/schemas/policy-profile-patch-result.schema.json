@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/policy-profile-patch-result.schema.json",
+  "title": "PolicyProfilePatchResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "generated_at",
+    "mode",
+    "profile_name",
+    "actor_id",
+    "reason",
+    "persisted",
+    "before_profile_hash",
+    "after_profile_hash",
+    "file_path",
+    "summary",
+    "patch_rules",
+    "before_profile",
+    "after_profile",
+    "changes",
+    "simulation_preview",
+    "audit_entry"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["dry_run", "apply"]
+    },
+    "profile_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,80}$"
+    },
+    "actor_id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 320
+    },
+    "persisted": {
+      "type": "boolean"
+    },
+    "patch_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^pph_[A-Za-z0-9_-]{6,64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rollback_target_patch_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^pph_[A-Za-z0-9_-]{6,64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "before_profile_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "after_profile_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "file_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_rules_before",
+        "total_rules_after",
+        "patch_rules",
+        "added",
+        "updated",
+        "removed",
+        "unchanged"
+      ],
+      "properties": {
+        "total_rules_before": { "type": "integer", "minimum": 0 },
+        "total_rules_after": { "type": "integer", "minimum": 0 },
+        "patch_rules": { "type": "integer", "minimum": 0 },
+        "added": { "type": "integer", "minimum": 0 },
+        "updated": { "type": "integer", "minimum": 0 },
+        "removed": { "type": "integer", "minimum": 0 },
+        "unchanged": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "patch_rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/policy_rule"
+      }
+    },
+    "before_profile": {
+      "$ref": "#/$defs/profile_ruleset"
+    },
+    "after_profile": {
+      "$ref": "#/$defs/profile_ruleset"
+    },
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "added_capabilities",
+        "updated_capabilities",
+        "removed_capabilities",
+        "unchanged_capabilities"
+      ],
+      "properties": {
+        "added_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "updated_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "removed_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "unchanged_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        }
+      }
+    },
+    "simulation_preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_context",
+        "summary_before",
+        "summary_after",
+        "improved_capabilities"
+      ],
+      "properties": {
+        "policy_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["org_policy", "workspace_policy", "agent_policy", "run_override"],
+          "properties": {
+            "org_policy": { "type": "string" },
+            "workspace_policy": { "type": "string" },
+            "agent_policy": { "type": "string" },
+            "run_override": { "type": "string" }
+          }
+        },
+        "summary_before": {
+          "$ref": "#/$defs/decision_summary"
+        },
+        "summary_after": {
+          "$ref": "#/$defs/decision_summary"
+        },
+        "improved_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        }
+      }
+    },
+    "audit_entry": {
+      "anyOf": [
+        { "$ref": "https://flockmesh.dev/spec/schemas/audit-entry.schema.json#" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "pattern": "^(\\*|[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+)$"
+    },
+    "policy_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "decision", "required_approvals"],
+      "properties": {
+        "capability": { "$ref": "#/$defs/capability" },
+        "decision": {
+          "type": "string",
+          "enum": ["allow", "deny", "escalate"]
+        },
+        "required_approvals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      }
+    },
+    "profile_ruleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "rules"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,80}$"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/policy_rule"
+          }
+        }
+      }
+    },
+    "decision_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "allow", "escalate", "deny"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "allow": { "type": "integer", "minimum": 0 },
+        "escalate": { "type": "integer", "minimum": 0 },
+        "deny": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

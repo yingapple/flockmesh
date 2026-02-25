@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/connector-drift.schema.json",
+  "title": "ConnectorScopeDriftReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generated_at",
+    "total",
+    "items"
+  ],
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "binding_id",
+          "connector_id",
+          "issue",
+          "unknown_scopes",
+          "detected_at"
+        ],
+        "properties": {
+          "binding_id": {
+            "type": "string",
+            "pattern": "^cnb_[A-Za-z0-9_-]{6,64}$"
+          },
+          "connector_id": {
+            "type": "string",
+            "pattern": "^con_[A-Za-z0-9_-]{6,64}$"
+          },
+          "issue": {
+            "type": "string",
+            "enum": [
+              "manifest_missing",
+              "scope_not_declared",
+              "attestation_invalid"
+            ]
+          },
+          "unknown_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+            }
+          },
+          "detected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "version": "v0",
+  "generated_at": "2026-02-24T15:20:00.000Z",
+  "total": 3,
+  "items": [
+    {
+      "profile_name": "agent_ops_assistant",
+      "rule_count": 2,
+      "decision_summary": {
+        "allow": 2,
+        "escalate": 0,
+        "deny": 0
+      },
+      "rules": [
+        {
+          "capability": "calendar.read",
+          "decision": "allow",
+          "required_approvals": 0
+        },
+        {
+          "capability": "jira.read",
+          "decision": "allow",
+          "required_approvals": 0
+        }
+      ]
+    },
+    {
+      "profile_name": "org_default_safe",
+      "rule_count": 2,
+      "decision_summary": {
+        "allow": 0,
+        "escalate": 1,
+        "deny": 1
+      },
+      "rules": [
+        {
+          "capability": "message.send",
+          "decision": "escalate",
+          "required_approvals": 1
+        },
+        {
+          "capability": "payment.execute",
+          "decision": "deny",
+          "required_approvals": 0
+        }
+      ]
+    },
+    {
+      "profile_name": "workspace_ops_cn",
+      "rule_count": 2,
+      "decision_summary": {
+        "allow": 1,
+        "escalate": 1,
+        "deny": 0
+      },
+      "rules": [
+        {
+          "capability": "doc.write",
+          "decision": "allow",
+          "required_approvals": 0
+        },
+        {
+          "capability": "message.send",
+          "decision": "escalate",
+          "required_approvals": 1
+        }
+      ]
+    }
+  ]
+}

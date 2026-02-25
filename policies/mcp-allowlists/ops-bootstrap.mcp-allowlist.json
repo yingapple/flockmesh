@@ -1,0 +1,19 @@
+{
+  "version": "v0",
+  "name": "mcp_ops_bootstrap",
+  "rules": [
+    {
+      "workspace_id": "wsp_mindverse_cn",
+      "agent_id": "*",
+      "allowed_tool_patterns": [
+        "search.*",
+        "jira.issue.read",
+        "calendar.events.read",
+        "docs.page.read",
+        "knowledge.fetch"
+      ],
+      "max_risk_tier": "R2",
+      "allow_mutation": true
+    }
+  ]
+}

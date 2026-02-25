@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlockMesh v0 Control Plane</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+
+    <main class="app-shell">
+      <header class="hero reveal">
+        <p class="eyebrow">FlockMesh v0</p>
+        <h1>
+          Agent-native office runtime,
+          <span>rooted in today, built for tomorrow.</span>
+        </h1>
+        <p class="subtitle">
+          Policy-first execution, optional ecosystem connectors, immutable audit.
+        </p>
+        <div class="hero-actions">
+          <button id="bootstrapBtn" class="btn btn-primary" data-ui-mode="advanced">Bootstrap Demo Run</button>
+          <button id="refreshBtn" class="btn btn-ghost">Refresh State</button>
+          <button id="starterModeBtn" class="btn btn-ghost">Starter Mode</button>
+          <button id="advancedModeBtn" class="btn btn-ghost">Advanced Mode</button>
+          <button id="compactToggleBtn" class="btn btn-ghost">Compact: Off</button>
+        </div>
+      </header>
+
+      <section class="stats-grid reveal" id="statsGrid" data-ui-mode="advanced">
+        <article class="stat-card">
+          <h3>Agents</h3>
+          <p id="agentsCount">0</p>
+        </article>
+        <article class="stat-card">
+          <h3>Bindings</h3>
+          <p id="bindingsCount">0</p>
+        </article>
+        <article class="stat-card">
+          <h3>Runs</h3>
+          <p id="runsCount">0</p>
+        </article>
+        <article class="stat-card">
+          <h3>Pending Approvals</h3>
+          <p id="pendingCount">0</p>
+        </article>
+      </section>
+
+      <section class="panel reveal">
+        <div class="panel-head">
+          <h2>One-person Quickstart</h2>
+          <span id="quickstartTag" class="tag">ready</span>
+        </div>
+        <div class="timeline-controls">
+          <label for="quickstartWorkspaceInput" class="timeline-label">Workspace</label>
+          <input id="quickstartWorkspaceInput" class="timeline-input" value="wsp_mindverse_cn" />
+          <label for="quickstartOwnerInput" class="timeline-label">Owner</label>
+          <input id="quickstartOwnerInput" class="timeline-input" value="usr_yingapple" />
+          <label for="quickstartTemplateSelect" class="timeline-label">Template</label>
+          <select id="quickstartTemplateSelect" class="timeline-select">
+            <option value="weekly_ops_sync">Weekly Ops Sync</option>
+            <option value="incident_response">Incident Response</option>
+          </select>
+          <label for="quickstartConnectorIdsInput" class="timeline-label">Connectors (Optional)</label>
+          <input
+            id="quickstartConnectorIdsInput"
+            class="timeline-input"
+            placeholder="con_feishu_official, con_mcp_gateway"
+          />
+          <label for="quickstartIdemInput" class="timeline-label">Idempotency</label>
+          <input
+            id="quickstartIdemInput"
+            class="timeline-input"
+            placeholder="idem_one_person_start_20260225"
+          />
+          <button id="quickstartStartBtn" class="btn btn-secondary">Start Quickstart</button>
+        </div>
+        <p id="quickstartMeta" class="run-meta">
+          3 fields only: workspace, owner, template.
+        </p>
+        <pre id="quickstartPayload" class="code-box">No quickstart run yet.</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="starter">
+        <div class="panel-head">
+          <h2>Advanced Tools</h2>
+          <span class="tag">optional</span>
+        </div>
+        <details class="advanced-tools-details">
+          <summary>Open advanced tool list</summary>
+          <p class="run-meta">
+            Blueprint Studio, Policy Patch/Rollback, Connector Governance, Timeline Diff,
+            Replay Integrity, Replay Drift, and Manual Ops console.
+          </p>
+          <button id="advancedToolsOpenBtn" class="btn btn-secondary">Switch To Advanced Mode</button>
+        </details>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Agent Blueprint Studio</h2>
+          <span id="blueprintTag" class="tag">idle</span>
+        </div>
+        <div class="timeline-controls">
+          <label for="blueprintWorkspaceInput" class="timeline-label">Workspace</label>
+          <input id="blueprintWorkspaceInput" class="timeline-input" value="wsp_mindverse_cn" />
+          <label for="blueprintKitSelect" class="timeline-label">Kit</label>
+          <select id="blueprintKitSelect" class="timeline-select"></select>
+          <label for="blueprintAgentNameInput" class="timeline-label">Agent Name</label>
+          <input id="blueprintAgentNameInput" class="timeline-input" value="Ops Blueprint Agent" />
+          <label for="blueprintOwnersInput" class="timeline-label">Owners</label>
+          <input id="blueprintOwnersInput" class="timeline-input" value="usr_yingapple" />
+          <label for="blueprintConnectorsInput" class="timeline-label">Connectors</label>
+          <input
+            id="blueprintConnectorsInput"
+            class="timeline-input"
+            placeholder="con_feishu_official, con_mcp_gateway"
+          />
+          <label for="blueprintPolicyOrgInput" class="timeline-label">Org Policy</label>
+          <input id="blueprintPolicyOrgInput" class="timeline-input" value="org_default_safe" />
+          <label for="blueprintPolicyWorkspaceInput" class="timeline-label">Workspace Policy</label>
+          <input id="blueprintPolicyWorkspaceInput" class="timeline-input" value="workspace_ops_cn" />
+          <label for="blueprintPolicyAgentInput" class="timeline-label">Agent Policy</label>
+          <input id="blueprintPolicyAgentInput" class="timeline-input" value="agent_ops_assistant" />
+          <label for="blueprintRunOverrideInput" class="timeline-label">Run Override</label>
+          <input id="blueprintRunOverrideInput" class="timeline-input" placeholder="optional policy profile" />
+          <label for="blueprintAuthRefsInput" class="timeline-label">Auth Refs</label>
+          <input
+            id="blueprintAuthRefsInput"
+            class="timeline-input"
+            placeholder="con_feishu_official=sec_feishu_prod, con_mcp_gateway=sec_mcp_prod"
+          />
+          <label for="blueprintIdemInput" class="timeline-label">Idempotency</label>
+          <input
+            id="blueprintIdemInput"
+            class="timeline-input"
+            placeholder="idem_blueprint_apply_20260223"
+          />
+          <label for="blueprintStrictModeInput" class="timeline-label">Strict</label>
+          <input id="blueprintStrictModeInput" class="timeline-checkbox" type="checkbox" />
+          <button id="blueprintReloadBtn" class="btn btn-ghost">Reload Kits</button>
+          <button id="blueprintPreviewBtn" class="btn btn-ghost">Preview Blueprint</button>
+          <button id="blueprintLintBtn" class="btn btn-ghost">Lint Blueprint</button>
+          <button id="blueprintRemediateBtn" class="btn btn-ghost">Auto Remediate</button>
+          <button id="blueprintApplyBtn" class="btn btn-secondary">Apply Blueprint</button>
+        </div>
+        <p id="blueprintMeta" class="run-meta">Load kits and preview your next office-agent runtime.</p>
+        <pre id="blueprintPayload" class="code-box">No blueprint loaded.</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Policy Patch Console</h2>
+          <span id="policyPatchTag" class="tag">idle</span>
+        </div>
+        <div class="timeline-controls">
+          <label for="policyPatchProfileSelect" class="timeline-label">Profile</label>
+          <select id="policyPatchProfileSelect" class="timeline-select"></select>
+          <label for="policyPatchActorInput" class="timeline-label">Actor</label>
+          <input id="policyPatchActorInput" class="timeline-input" value="usr_yingapple" />
+          <label for="policyPatchReasonInput" class="timeline-label">Reason</label>
+          <input
+            id="policyPatchReasonInput"
+            class="timeline-input"
+            value="agent-blueprint remediation patch"
+          />
+          <label for="policyPatchHashInput" class="timeline-label">Profile Hash</label>
+          <input
+            id="policyPatchHashInput"
+            class="timeline-input"
+            readonly
+            value="(load profile version)"
+          />
+          <label for="policyPatchRulesInput" class="timeline-label">Patch Rules</label>
+          <textarea
+            id="policyPatchRulesInput"
+            class="timeline-textarea"
+            rows="5"
+            placeholder="ticket.create escalate 1&#10;message.send escalate 1&#10;doc.write allow"
+          ></textarea>
+          <button id="policyPatchReloadBtn" class="btn btn-ghost">Reload Profiles</button>
+          <button id="policyPatchVersionBtn" class="btn btn-ghost">Refresh Version</button>
+          <button id="policyPatchFromRemediationBtn" class="btn btn-ghost">Draft From Remediation</button>
+          <button id="policyPatchDryRunBtn" class="btn btn-ghost">Dry Run Patch</button>
+          <button id="policyPatchApplyBtn" class="btn btn-secondary">Apply Patch</button>
+        </div>
+        <p id="policyPatchMeta" class="run-meta">
+          Load policy profiles and run a dry-run before applying.
+        </p>
+        <pre id="policyPatchPayload" class="code-box">No policy patch payload yet.</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Policy Rollback Console</h2>
+          <span id="policyRollbackTag" class="tag">idle</span>
+        </div>
+        <div class="timeline-controls">
+          <label for="policyRollbackProfileSelect" class="timeline-label">Profile</label>
+          <select id="policyRollbackProfileSelect" class="timeline-select"></select>
+          <label for="policyRollbackActorInput" class="timeline-label">Actor</label>
+          <input id="policyRollbackActorInput" class="timeline-input" value="usr_yingapple" />
+          <label for="policyRollbackReasonInput" class="timeline-label">Reason</label>
+          <input
+            id="policyRollbackReasonInput"
+            class="timeline-input"
+            value="policy rollback from control plane"
+          />
+          <label for="policyRollbackTargetPatchIdInput" class="timeline-label">Target Patch ID</label>
+          <input
+            id="policyRollbackTargetPatchIdInput"
+            class="timeline-input"
+            placeholder="pph_xxx (optional, defaults to latest)"
+          />
+          <label for="policyRollbackTargetStateSelect" class="timeline-label">Target State</label>
+          <select id="policyRollbackTargetStateSelect" class="timeline-select">
+            <option value="before">before</option>
+            <option value="after">after</option>
+          </select>
+          <label for="policyRollbackHashInput" class="timeline-label">Profile Hash</label>
+          <input
+            id="policyRollbackHashInput"
+            class="timeline-input"
+            readonly
+            value="(load profile version)"
+          />
+          <button id="policyRollbackReloadBtn" class="btn btn-ghost">Reload History</button>
+          <button id="policyRollbackVersionBtn" class="btn btn-ghost">Refresh Version</button>
+          <button id="policyRollbackDraftLatestBtn" class="btn btn-ghost">Draft Latest</button>
+          <button id="policyRollbackDryRunBtn" class="btn btn-ghost">Dry Run Rollback</button>
+          <button id="policyRollbackApplyBtn" class="btn btn-secondary">Apply Rollback</button>
+        </div>
+        <p id="policyRollbackMeta" class="run-meta">
+          Load profile history and run dry-run before apply rollback.
+        </p>
+        <pre id="policyRollbackHistoryPayload" class="code-box">No rollback history loaded.</pre>
+        <pre id="policyRollbackPayload" class="code-box">No policy rollback payload yet.</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>System Pulse</h2>
+          <span id="healthTag" class="tag">checking...</span>
+        </div>
+        <pre id="healthPayload" class="code-box">Loading /health...</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Connector Governance</h2>
+          <span id="connectorHealthTag" class="tag">checking...</span>
+        </div>
+        <div class="governance-grid">
+          <pre id="connectorHealthPayload" class="code-box">Loading /v0/connectors/health...</pre>
+          <pre id="connectorDriftPayload" class="code-box">Loading /v0/connectors/drift...</pre>
+        </div>
+        <div class="attestation-summary">
+          <div class="panel-head panel-head-tight">
+            <h3>Attestation Summary</h3>
+            <span id="attestationTag" class="tag">checking...</span>
+          </div>
+          <div class="attestation-grid">
+            <article class="attestation-card">
+              <h4>Verified</h4>
+              <p id="attestationVerifiedCount">0</p>
+            </article>
+            <article class="attestation-card">
+              <h4>Unverified</h4>
+              <p id="attestationUnverifiedCount">0</p>
+            </article>
+            <article class="attestation-card">
+              <h4>Missing Manifest</h4>
+              <p id="attestationMissingCount">0</p>
+            </article>
+            <article class="attestation-card">
+              <h4>High-Control Risk</h4>
+              <p id="attestationHighControlRiskCount">0</p>
+            </article>
+          </div>
+          <p id="attestationKeyIds" class="run-meta">key ids: loading...</p>
+        </div>
+      </section>
+
+      <section class="panel reveal">
+        <div class="panel-head">
+          <h2>Approval Inbox</h2>
+          <span id="approvalInboxTag" class="tag">loading...</span>
+        </div>
+        <div id="approvalInbox" class="approval-feed"></div>
+      </section>
+
+      <section class="panel reveal">
+        <div class="panel-head">
+          <h2>Run Feed</h2>
+          <span class="tag">Live Runtime</span>
+        </div>
+        <div id="runFeed" class="run-feed"></div>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Run Timeline Split</h2>
+          <span id="timelineTag" class="tag">idle</span>
+        </div>
+        <div class="timeline-controls">
+          <label for="timelineRunSelect" class="timeline-label">Run</label>
+          <select id="timelineRunSelect" class="timeline-select"></select>
+          <label for="timelineBaseRunSelect" class="timeline-label">Base</label>
+          <select id="timelineBaseRunSelect" class="timeline-select"></select>
+          <button id="timelineReloadBtn" class="btn btn-ghost">Reload Timeline</button>
+          <button id="timelineDiffBtn" class="btn btn-ghost">Load Diff</button>
+          <button id="timelineReplayBtn" class="btn btn-ghost">Replay Check</button>
+          <button id="timelineReplayExportBtn" class="btn btn-secondary">Replay Export</button>
+          <button id="timelineExportBtn" class="btn btn-secondary">Export Incident</button>
+        </div>
+        <p id="timelineMeta" class="run-meta">Select a run to inspect events vs audit ledger.</p>
+        <div class="timeline-grid">
+          <pre id="timelineEventsPayload" class="code-box">No run selected.</pre>
+          <pre id="timelineAuditPayload" class="code-box">No run selected.</pre>
+        </div>
+        <p id="timelineDiffMeta" class="run-meta">Select base run and click Load Diff.</p>
+        <pre id="timelineDiffPayload" class="code-box">No diff loaded.</pre>
+        <p id="timelineReplayMeta" class="run-meta">Click Replay Check to validate run integrity.</p>
+        <pre id="timelineReplayPayload" class="code-box">No replay check loaded.</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Policy Trace</h2>
+          <span id="policyTraceTag" class="tag">idle</span>
+        </div>
+        <pre id="policyTracePayload" class="code-box">Select a run to visualize policy trace.</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Replay Drift Monitor</h2>
+          <span id="replayDriftTag" class="tag">idle</span>
+        </div>
+        <div class="timeline-controls">
+          <button id="replayDriftRefreshBtn" class="btn btn-ghost">Refresh Replay Drift</button>
+        </div>
+        <p id="replayDriftMeta" class="run-meta">Replay drift monitor is idle.</p>
+        <pre id="replayDriftPayload" class="code-box">No replay drift summary loaded.</pre>
+      </section>
+
+      <section class="panel reveal" data-ui-mode="advanced">
+        <div class="panel-head">
+          <h2>Action Console</h2>
+          <span class="tag">Manual Ops</span>
+        </div>
+        <div class="console-grid">
+          <button id="createAgentBtn" class="btn btn-secondary">Create Agent</button>
+          <button id="createBindingBtn" class="btn btn-secondary">Create Binding</button>
+          <button id="createRunBtn" class="btn btn-secondary">Create Run</button>
+        </div>
+        <pre id="actionLog" class="code-box"></pre>
+      </section>
+    </main>
+
+    <template id="runCardTemplate">
+      <article class="run-card">
+        <div class="run-top">
+          <h3 class="run-id"></h3>
+          <span class="run-status"></span>
+        </div>
+        <p class="run-meta"></p>
+        <div class="run-actions"></div>
+      </article>
+    </template>
+
+    <script type="module" src="/ui.js"></script>
+  </body>
+</html>

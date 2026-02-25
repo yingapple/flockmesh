@@ -1,0 +1,92 @@
+{
+  "version": "v0",
+  "generated_at": "2026-02-24T07:10:00.000Z",
+  "mode": "apply",
+  "profile_name": "policy_patch_apply_demo",
+  "actor_id": "usr_yingapple",
+  "reason": "reduce deny to approval path for ticket escalation",
+  "persisted": true,
+  "patch_id": "pph_6f4f911c5d91",
+  "rollback_target_patch_id": null,
+  "before_profile_hash": "sha256:34f5c9db4f7ef2b30ce9d5e32219802d47d6c97edb96b88dd5d645eebeaf25c3",
+  "after_profile_hash": "sha256:3db5d9e8f6be916e2011b74e2bffb65f078f2fa61a06b15aa42f5272279cc368",
+  "file_path": "/Users/yingapple/Documents/yx_self/flockmesh/policies/policy_patch_apply_demo.policy.json",
+  "summary": {
+    "total_rules_before": 1,
+    "total_rules_after": 1,
+    "patch_rules": 1,
+    "added": 0,
+    "updated": 1,
+    "removed": 0,
+    "unchanged": 0
+  },
+  "patch_rules": [
+    {
+      "capability": "ticket.create",
+      "decision": "escalate",
+      "required_approvals": 1
+    }
+  ],
+  "before_profile": {
+    "name": "policy_patch_apply_demo",
+    "rules": [
+      {
+        "capability": "ticket.create",
+        "decision": "deny",
+        "required_approvals": 0
+      }
+    ]
+  },
+  "after_profile": {
+    "name": "policy_patch_apply_demo",
+    "rules": [
+      {
+        "capability": "ticket.create",
+        "decision": "escalate",
+        "required_approvals": 1
+      }
+    ]
+  },
+  "changes": {
+    "added_capabilities": [],
+    "updated_capabilities": [
+      "ticket.create"
+    ],
+    "removed_capabilities": [],
+    "unchanged_capabilities": []
+  },
+  "simulation_preview": {
+    "policy_context": {
+      "org_policy": "org_default_safe",
+      "workspace_policy": "workspace_ops_cn",
+      "agent_policy": "agent_ops_assistant",
+      "run_override": "policy_patch_apply_demo"
+    },
+    "summary_before": {
+      "total": 1,
+      "allow": 0,
+      "escalate": 0,
+      "deny": 1
+    },
+    "summary_after": {
+      "total": 1,
+      "allow": 0,
+      "escalate": 1,
+      "deny": 0
+    },
+    "improved_capabilities": [
+      "ticket.create"
+    ]
+  },
+  "audit_entry": {
+    "id": "aud_6f4f911c5d91",
+    "run_id": "run_4b918cc1f32d",
+    "event_type": "policy.patch.applied",
+    "actor": {
+      "type": "user",
+      "id": "usr_yingapple"
+    },
+    "payload_hash": "sha256:2ecf8d95f8f641d60522de385f4111f8dfa042192eec447927f0b5ac8352f6c2",
+    "occurred_at": "2026-02-24T07:10:00.000Z"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/audit-entry.schema.json",
+  "title": "AuditEntry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "run_id",
+    "event_type",
+    "actor",
+    "payload_hash",
+    "occurred_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^aud_[A-Za-z0-9_-]{6,64}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "run.created",
+        "action.planned",
+        "policy.evaluated",
+        "approval.requested",
+        "approval.resolved",
+        "action.executed",
+        "action.denied",
+        "connector.invoke.requested",
+        "connector.invoke.blocked",
+        "connector.invoke.rate_limited",
+        "connector.invoke.retry",
+        "connector.invoke.executed",
+        "connector.invoke.timeout",
+        "connector.invoke.error",
+        "policy.patch.applied",
+        "policy.rollback.applied",
+        "run.completed",
+        "run.failed",
+        "run.cancelled"
+      ]
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "user",
+            "agent",
+            "system"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128
+        }
+      }
+    },
+    "payload_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "decision_ref": {
+      "type": "string",
+      "pattern": "^pol_[A-Za-z0-9_-]{6,64}$"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

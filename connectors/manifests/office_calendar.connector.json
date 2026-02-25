@@ -1,0 +1,22 @@
+{
+  "version": "v0",
+  "connector_id": "con_office_calendar",
+  "name": "Office Calendar Connector",
+  "category": "office_system",
+  "protocol": "http",
+  "trust_level": "standard",
+  "status": "active",
+  "capabilities": [
+    "calendar.read",
+    "calendar.write"
+  ],
+  "metadata": {
+    "purpose": "Read and update team calendars in existing office suites."
+  },
+  "attestation": {
+    "algorithm": "HMAC-SHA256",
+    "key_id": "att_dev_main_v1",
+    "payload_hash": "sha256:4017202b80bca84d97ff383c67402609472b852b63f1f78494bf0e8a4ab10e2e",
+    "signature": "eec4a0990d15060302ca13fc4bff1194aa8d3c84100e8e0158ad0f9886df8a3d"
+  }
+}

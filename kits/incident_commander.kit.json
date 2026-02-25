@@ -1,0 +1,58 @@
+{
+  "version": "v0",
+  "kit_id": "kit_incident_commander",
+  "name": "Incident Commander",
+  "description": "Incident-first agent kit optimized for triage, evidence collection, and approved outbound updates.",
+  "role": "incident_commander",
+  "default_policy_profile": "polprof_ops_standard",
+  "default_playbook_id": "pbk_incident_triage",
+  "capability_goals": [
+    "message.send",
+    "calendar.read",
+    "doc.read",
+    "tool.list",
+    "tool.read",
+    "delegation.request",
+    "delegation.status"
+  ],
+  "connector_candidates": [
+    {
+      "connector_id": "con_feishu_official",
+      "required_capabilities": ["message.send", "doc.read"],
+      "optional_capabilities": ["calendar.read"],
+      "risk_profile": "restricted"
+    },
+    {
+      "connector_id": "con_mcp_gateway",
+      "required_capabilities": ["tool.list", "tool.read"],
+      "optional_capabilities": ["tool.invoke"],
+      "risk_profile": "high_control"
+    },
+    {
+      "connector_id": "con_a2a_gateway",
+      "required_capabilities": ["delegation.request", "delegation.status"],
+      "optional_capabilities": ["delegation.cancel"],
+      "risk_profile": "high_control"
+    }
+  ],
+  "rollout": [
+    {
+      "phase_id": "phase_triage",
+      "title": "Triage",
+      "focus": "Read incident context and summarize evidence into a deterministic timeline.",
+      "approval_expectation": "none"
+    },
+    {
+      "phase_id": "phase_notify",
+      "title": "Notify",
+      "focus": "Send stakeholder updates through approval-gated outbound message actions.",
+      "approval_expectation": "single"
+    },
+    {
+      "phase_id": "phase_delegate",
+      "title": "Delegate",
+      "focus": "Delegate specialist tasks through A2A once trust and audit baselines pass.",
+      "approval_expectation": "single_or_dual"
+    }
+  ]
+}

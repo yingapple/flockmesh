@@ -1,0 +1,56 @@
+{
+  "version": "v0",
+  "exported_at": "2026-02-24T17:10:00.000Z",
+  "filters": {
+    "profile_name": "workspace_ops_cn",
+    "operation": "patch",
+    "limit": 50,
+    "offset": 0
+  },
+  "history": {
+    "total": 1,
+    "limit": 50,
+    "offset": 0,
+    "items": [
+      {
+        "patch_id": "pph_111122223333",
+        "profile_name": "workspace_ops_cn",
+        "operation": "patch",
+        "rollback_target_patch_id": "",
+        "rollback_target_state": "",
+        "actor_id": "usr_yingapple",
+        "reason": "enable approval path for ticket.create",
+        "applied_at": "2026-02-24T16:00:00.000Z",
+        "file_path": "/Users/yingapple/Documents/yx_self/flockmesh/policies/workspace_ops_cn.policy.json",
+        "before_profile_hash": "sha256:d8bd9689cc3b31d1e8f7ecddf06d44fac4977deca4b991194f47b6670a3cc70a",
+        "after_profile_hash": "sha256:ee18ba13f30f97a8f7648d405667c4549f2d675afdb80743b66cab88b9e70768",
+        "summary": {
+          "total_rules_before": 2,
+          "total_rules_after": 3,
+          "patch_rules": 1,
+          "added": 1,
+          "updated": 0,
+          "removed": 0,
+          "unchanged": 2
+        },
+        "changes": {
+          "added_capabilities": [
+            "ticket.create"
+          ],
+          "updated_capabilities": [],
+          "removed_capabilities": [],
+          "unchanged_capabilities": [
+            "doc.write",
+            "message.send"
+          ]
+        }
+      }
+    ]
+  },
+  "signature": {
+    "algorithm": "HMAC-SHA256",
+    "key_id": "exp_dev_main_v1",
+    "payload_hash": "sha256:6e2cb8c3e4a1f2b8c3c2a2f62f67d33e0d4bca8a3f7bc4db6d7f36445a9e1fa1",
+    "signature": "53f997e4a17bc6c47aab3a8600a9a5f64b672e7f4ef2f9681a6f3a8c8ab8f2d0"
+  }
+}

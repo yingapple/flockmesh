@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/policy-simulation.schema.json",
+  "title": "PolicySimulationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "summary",
+    "decisions"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "policy_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "org_policy": {
+          "type": "string"
+        },
+        "workspace_policy": {
+          "type": "string"
+        },
+        "agent_policy": {
+          "type": "string"
+        },
+        "run_override": {
+          "type": "string"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "allow",
+        "escalate",
+        "deny",
+        "status"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allow": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "escalate": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deny": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "waiting_approval",
+            "failed"
+          ]
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "https://flockmesh.dev/spec/schemas/policy-decision.schema.json#"
+      }
+    }
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flockmesh.dev/spec/schemas/policy-decision.schema.json",
+  "title": "PolicyDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "run_id",
+    "action_intent_id",
+    "decision",
+    "risk_tier",
+    "reason_codes",
+    "policy_trace",
+    "evaluated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^pol_[A-Za-z0-9_-]{6,64}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_-]{6,64}$"
+    },
+    "action_intent_id": {
+      "type": "string",
+      "pattern": "^act_[A-Za-z0-9_-]{6,64}$"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny",
+        "escalate"
+      ]
+    },
+    "risk_tier": {
+      "type": "string",
+      "enum": [
+        "R0",
+        "R1",
+        "R2",
+        "R3"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_\\.:-]{2,80}$"
+      },
+      "uniqueItems": true
+    },
+    "required_approvals": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 0
+    },
+    "policy_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "org_policy",
+        "workspace_policy",
+        "agent_policy",
+        "effective_source"
+      ],
+      "properties": {
+        "org_policy": {
+          "type": "string"
+        },
+        "workspace_policy": {
+          "type": "string"
+        },
+        "agent_policy": {
+          "type": "string"
+        },
+        "run_override": {
+          "type": "string"
+        },
+        "effective_source": {
+          "type": "string",
+          "enum": [
+            "org",
+            "workspace",
+            "agent",
+            "run_override"
+          ]
+        }
+      }
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "const": "escalate"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "required_approvals": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  ]
+}
