@@ -5,9 +5,9 @@ Agent-native collaboration framework for the post-chat organization.
 FlockMesh is an open framework for teams where humans and agents work together on real business systems.  
 The product center is no longer "chat channel". The center is `Agent + Connector + Policy + Audit`.
 
-## One-Line Chinese Thesis
+## One-Line Thesis
 
-FlockMesh 不是新聊天工具，而是组织级 `Agent 协作操作层`：可选接入办公系统、策略化权限控制、全链路审计。
+FlockMesh is not a new chat tool. It is an organization-grade `Agent Collaboration Operation Layer` with optional office-system connectivity, policy-controlled permissions, and end-to-end auditability.
 
 ## Manifesto
 
@@ -171,7 +171,7 @@ Not in scope yet:
 - Enterprise IAM and billing suite
 - Visual no-code builder for every workflow type
 
-## Why Now (Facts, as of 2026-02-21)
+## Why Now (Context)
 
 - A2A is now under Linux Foundation governance for open, vendor-neutral agent interoperability (announced June 23, 2025).
 - MCP has become a broad ecosystem standard and is governed via AAIF; Anthropic announced donation to AAIF on Dec 9, 2025.
@@ -250,7 +250,16 @@ Control Plane currently includes:
 
 Actor identity guardrail:
 
-- Mutating APIs require `x-flockmesh-actor-id` and enforce match with body actor claims (`trigger.actor_id`, `approved_by`, `cancelled_by`, `initiated_by`, `owner_id`, `actor_id`).
+- Actor-validated mutating APIs require `x-flockmesh-actor-id` and enforce match with body actor claims (`trigger.actor_id`, `approved_by`, `cancelled_by`, `initiated_by`, `owner_id`, `actor_id`).
+- Currently enforced on:
+  - `POST /v0/quickstart/one-person`
+  - `POST /v0/runs`
+  - `POST /v0/runs/{run_id}/approvals`
+  - `POST /v0/runs/{run_id}/cancel`
+  - `POST /v0/connectors/adapters/{connector_id}/simulate`
+  - `POST /v0/connectors/adapters/{connector_id}/invoke`
+  - `POST /v0/policy/patch`
+  - `POST /v0/policy/rollback`
 - Control Plane UI now injects this header automatically.
 
 Demo bootstrap in control-plane now defaults to `system-first`:
@@ -285,6 +294,7 @@ curl -s http://127.0.0.1:8080/v0/policy/profiles/workspace_ops_cn/version | jq '
 
 curl -s http://127.0.0.1:8080/v0/policy/patch \
   -H 'content-type: application/json' \
+  -H 'x-flockmesh-actor-id: usr_yingapple' \
   -d '{"profile_name":"workspace_ops_cn","mode":"dry_run","actor_id":"usr_yingapple","reason":"preview escalation patch","patch_rules":[{"capability":"ticket.create","decision":"escalate","required_approvals":1}]}' | jq '.mode,.summary,.simulation_preview'
 
 curl -s "http://127.0.0.1:8080/v0/policy/patches?profile_name=workspace_ops_cn&limit=5" | jq '.items[].patch_id'
@@ -293,6 +303,7 @@ curl -s "http://127.0.0.1:8080/v0/policy/patches/export?profile_name=workspace_o
 
 curl -s http://127.0.0.1:8080/v0/policy/rollback \
   -H 'content-type: application/json' \
+  -H 'x-flockmesh-actor-id: usr_yingapple' \
   -d '{"profile_name":"workspace_ops_cn","mode":"dry_run","target_state":"before","reason":"preview rollback"}' | jq '.mode,.rollback_target_patch_id,.summary'
 ```
 
