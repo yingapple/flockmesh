@@ -27,7 +27,8 @@ const state = {
   compactMode: false,
   runtimeView: 'approvals',
   workbenchSection: 'agent',
-  journeySetupConfirmed: false
+  journeySetupConfirmed: false,
+  journeyPresetId: 'opc'
 };
 
 const DEMO_BOOTSTRAP_PRESET = Object.freeze({
@@ -49,6 +50,25 @@ const ONE_PERSON_QUICKSTART_TEMPLATES = Object.freeze({
   })
 });
 
+const JOURNEY_PATH_PRESETS = Object.freeze({
+  startup: Object.freeze({
+    label: '创业公司路径',
+    workspaceId: 'wsp_startup_launch',
+    ownerId: 'usr_founder_ops',
+    templateId: 'incident_response',
+    connectorIds: ['con_feishu_official', 'con_mcp_gateway'],
+    idempotencyPrefix: 'idem_startup_first_run'
+  }),
+  opc: Object.freeze({
+    label: 'OPC 路径',
+    workspaceId: 'wsp_one_person_company',
+    ownerId: 'usr_solo_builder',
+    templateId: 'weekly_ops_sync',
+    connectorIds: ['con_feishu_official'],
+    idempotencyPrefix: 'idem_opc_first_run'
+  })
+});
+
 const UI_MODE_STORAGE_KEY = 'flockmesh_ui_mode';
 const UI_MODE_SET = new Set(['starter', 'advanced']);
 const RUNTIME_VIEW_SET = new Set(['approvals', 'runs']);
@@ -57,6 +77,8 @@ const WORKBENCH_SECTION_SET = new Set(['agent', 'governance', 'observability']);
 const els = {
   bootstrapBtn: document.getElementById('bootstrapBtn'),
   heroStartQuickstartBtn: document.getElementById('heroStartQuickstartBtn'),
+  heroStartupPathBtn: document.getElementById('heroStartupPathBtn'),
+  heroOpcPathBtn: document.getElementById('heroOpcPathBtn'),
   refreshBtn: document.getElementById('refreshBtn'),
   starterModeBtn: document.getElementById('starterModeBtn'),
   advancedModeBtn: document.getElementById('advancedModeBtn'),
@@ -71,6 +93,7 @@ const els = {
   journeySetupStatus: document.getElementById('journeySetupStatus'),
   journeyRunStatus: document.getElementById('journeyRunStatus'),
   journeyReviewStatus: document.getElementById('journeyReviewStatus'),
+  journeyPresetTag: document.getElementById('journeyPresetTag'),
   journeyGoSetupBtn: document.getElementById('journeyGoSetupBtn'),
   journeyStartRunBtn: document.getElementById('journeyStartRunBtn'),
   journeyContinueToStartBtn: document.getElementById('journeyContinueToStartBtn'),
@@ -187,7 +210,8 @@ const els = {
   policyRollbackMeta: document.getElementById('policyRollbackMeta'),
   policyRollbackHistoryPayload: document.getElementById('policyRollbackHistoryPayload'),
   policyRollbackPayload: document.getElementById('policyRollbackPayload'),
-  runCardTemplate: document.getElementById('runCardTemplate')
+  runCardTemplate: document.getElementById('runCardTemplate'),
+  heroPathCards: Array.from(document.querySelectorAll('.hero-path-card'))
 };
 
 function logAction(label, payload) {
@@ -390,6 +414,76 @@ function setRuntimeView(view) {
   els.runtimeFocusTag.textContent = showApprovals ? 'pending decisions' : 'active runs';
 }
 
+function resolveJourneyPresetId(value) {
+  return String(value || '').trim() === 'startup' ? 'startup' : 'opc';
+}
+
+function selectedJourneyPreset() {
+  return JOURNEY_PATH_PRESETS[resolveJourneyPresetId(state.journeyPresetId)];
+}
+
+function setJourneyPresetUi() {
+  const presetId = resolveJourneyPresetId(state.journeyPresetId);
+  const preset = selectedJourneyPreset();
+  if (els.journeyPresetTag) {
+    els.journeyPresetTag.textContent = `selected: ${preset.label}`;
+  }
+
+  for (const card of els.heroPathCards) {
+    const pathId = card.querySelector('button')?.id === 'heroStartupPathBtn' ? 'startup' : 'opc';
+    card.classList.toggle('is-active', pathId === presetId);
+  }
+
+  if (els.heroStartupPathBtn) {
+    const active = presetId === 'startup';
+    els.heroStartupPathBtn.classList.toggle('btn-secondary', active);
+    els.heroStartupPathBtn.classList.toggle('btn-ghost', !active);
+  }
+
+  if (els.heroOpcPathBtn) {
+    const active = presetId === 'opc';
+    els.heroOpcPathBtn.classList.toggle('btn-secondary', active);
+    els.heroOpcPathBtn.classList.toggle('btn-ghost', !active);
+  }
+}
+
+function buildJourneyPresetIdempotencyKey(presetId) {
+  const target = JOURNEY_PATH_PRESETS[resolveJourneyPresetId(presetId)];
+  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `${target.idempotencyPrefix}_${datePart}`;
+}
+
+function applyJourneyPreset(presetId, { focus = true, enforceStarterMode = true } = {}) {
+  const nextPresetId = resolveJourneyPresetId(presetId);
+  const preset = JOURNEY_PATH_PRESETS[nextPresetId];
+  state.journeyPresetId = nextPresetId;
+  state.journeySetupConfirmed = false;
+
+  if (enforceStarterMode) {
+    setUiMode('starter');
+  }
+
+  els.quickstartWorkspaceInput.value = preset.workspaceId;
+  els.quickstartOwnerInput.value = preset.ownerId;
+  els.quickstartTemplateSelect.value = preset.templateId;
+  els.quickstartConnectorIdsInput.value = preset.connectorIds.join(', ');
+  els.quickstartIdemInput.value = buildJourneyPresetIdempotencyKey(nextPresetId);
+
+  state.quickstartResult = null;
+  els.quickstartMeta.textContent = `${preset.label} selected. Review Step 1 fields, then Continue To Step 2.`;
+  updateJourneyState();
+  setJourneyPresetUi();
+  if (focus) {
+    focusQuickstartSetup();
+  }
+  logAction('journey:preset:selected', {
+    preset_id: nextPresetId,
+    workspace_id: preset.workspaceId,
+    owner_id: preset.ownerId,
+    template_id: preset.templateId
+  });
+}
+
 function quickstartSetupReady() {
   const workspaceId = String(els.quickstartWorkspaceInput.value || '').trim();
   const ownerId = String(els.quickstartOwnerInput.value || '').trim();
@@ -445,7 +539,8 @@ function updateJourneyState() {
   const ownerId = String(els.quickstartOwnerInput.value || '').trim() || '-';
   const templateId = selectedQuickstartTemplateId();
   const template = ONE_PERSON_QUICKSTART_TEMPLATES[templateId];
-  els.runLaunchSummary.textContent = `Workspace ${workspaceId} · Owner ${ownerId} · Template ${template?.label || templateId}.`;
+  const preset = selectedJourneyPreset();
+  els.runLaunchSummary.textContent = `Path ${preset.label} · Workspace ${workspaceId} · Owner ${ownerId} · Template ${template?.label || templateId}.`;
   els.runLaunchTag.textContent = setupReady ? 'ready' : 'blocked';
 
   els.journeyContinueToStartBtn.disabled = !setupReady;
@@ -454,6 +549,7 @@ function updateJourneyState() {
   els.journeyBackToSetupBtn.disabled = !state.journeySetupConfirmed;
   els.journeyReviewBtn.disabled = !hasRuns;
   els.heroStartQuickstartBtn.disabled = !setupReady;
+  setJourneyPresetUi();
 }
 
 function openRuntimeReview() {
@@ -2318,6 +2414,12 @@ async function bootstrapDemo() {
 }
 
 els.bootstrapBtn.addEventListener('click', bootstrapDemo);
+els.heroStartupPathBtn.addEventListener('click', () => {
+  applyJourneyPreset('startup');
+});
+els.heroOpcPathBtn.addEventListener('click', () => {
+  applyJourneyPreset('opc');
+});
 els.heroStartQuickstartBtn.addEventListener('click', async () => {
   if (!quickstartSetupReady()) {
     focusQuickstartSetup();
@@ -2673,6 +2775,7 @@ try {
   if (state.uiMode === 'advanced') {
     openPrimaryWorkbenchGroup();
   }
+  applyJourneyPreset(state.journeyPresetId, { focus: false, enforceStarterMode: false });
   setCompactMode(readInitialCompactMode(), { persist: false });
   updateJourneyState();
   await Promise.all([

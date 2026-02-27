@@ -18,29 +18,58 @@
 
     <main class="app-shell">
       <header class="hero reveal">
-        <p class="eyebrow">FlockMesh v0</p>
-        <h1>
-          Agent-native office runtime,
-          <span>rooted in today, built for tomorrow.</span>
-        </h1>
-        <p class="subtitle">
-          Policy-first execution, optional ecosystem connectors, immutable audit.
-        </p>
-        <div class="hero-actions">
-          <button id="heroStartQuickstartBtn" class="btn btn-primary" data-ui-mode="starter">Start First Run</button>
-          <button id="advancedModeBtn" class="btn btn-ghost">Open Workbench</button>
-        </div>
-        <p class="hero-helper">
-          New here? Follow 3 steps: Configure, Start, Review. One main action at a time.
-        </p>
-        <details class="advanced-tools-details progressive-disclosure hero-disclosure">
-          <summary>View additional options</summary>
-          <div class="timeline-controls">
-            <button id="refreshBtn" class="btn btn-ghost">Refresh State</button>
-            <button id="starterModeBtn" class="btn btn-ghost">Back To Focus</button>
-            <button id="compactToggleBtn" class="btn btn-ghost">Compact: Off</button>
+        <div class="hero-layout">
+          <div class="hero-main">
+            <p class="eyebrow">FlockMesh v0</p>
+            <h1>
+              Agent-native office runtime,
+              <span>rooted in today, built for tomorrow.</span>
+            </h1>
+            <p class="subtitle">
+              Policy-first execution, optional ecosystem connectors, immutable audit.
+            </p>
+            <div class="hero-actions">
+              <button id="heroStartQuickstartBtn" class="btn btn-primary" data-ui-mode="starter">Start First Run</button>
+            </div>
+            <p class="hero-helper">
+              New here? Follow 3 steps: Configure, Start, Review. One main action at a time.
+            </p>
+            <details class="advanced-tools-details progressive-disclosure hero-disclosure">
+              <summary>View additional options</summary>
+              <div class="timeline-controls">
+                <button id="advancedModeBtn" class="btn btn-ghost">Open Workbench</button>
+                <button id="refreshBtn" class="btn btn-ghost">Refresh State</button>
+                <button id="starterModeBtn" class="btn btn-ghost">Back To Focus</button>
+                <button id="compactToggleBtn" class="btn btn-ghost">Compact: Off</button>
+              </div>
+            </details>
           </div>
-        </details>
+          <aside class="hero-paths" data-ui-mode="starter">
+            <div class="hero-paths-head">
+              <h2>Pick A Path</h2>
+              <span id="journeyPresetTag" class="tag">recommended: opc</span>
+            </div>
+            <p class="run-meta">One click presets Step 1 only. The flow remains strict: 1 → 2 → 3.</p>
+            <article class="hero-path-card">
+              <h3>创业公司路径</h3>
+              <p>多人协作，优先准备 incident-ready runtime 与治理能力。</p>
+              <button id="heroStartupPathBtn" class="btn btn-secondary">Use Startup Path</button>
+            </article>
+            <article class="hero-path-card">
+              <h3>OPC 路径</h3>
+              <p>单人执行，快速进入 weekly ops 节奏并保持低维护成本。</p>
+              <button id="heroOpcPathBtn" class="btn btn-ghost">Use OPC Path</button>
+            </article>
+            <div class="hero-path-preview">
+              <h3>What Happens Next</h3>
+              <ol>
+                <li>Step 1: Review auto-filled setup fields.</li>
+                <li>Step 2: Confirm and launch your first run.</li>
+                <li>Step 3: Resolve pending approvals or monitor runs.</li>
+              </ol>
+            </div>
+          </aside>
+        </div>
       </header>
 
       <section class="panel reveal journey-panel" data-ui-mode="starter">

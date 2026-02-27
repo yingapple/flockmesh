@@ -5,7 +5,7 @@
   --ink-0: #1f2633;
   --ink-1: #5f6b7f;
   --accent-0: #1456f0;
-  --accent-1: #611f69;
+  --accent-1: #2f5dcb;
   --accent-2: #2f7cf6;
   --danger: #d92d20;
   --ok: #1d9a6c;
@@ -67,6 +67,17 @@ body {
   box-shadow: var(--shadow);
 }
 
+.hero-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+}
+
+.hero-main {
+  min-width: 0;
+  flex: 1;
+}
+
 .eyebrow {
   font-family: 'IBM Plex Mono', monospace;
   letter-spacing: 0.07em;
@@ -80,7 +91,7 @@ body {
   line-height: 1.04;
   letter-spacing: -0.02em;
   font-size: clamp(2.05rem, 5.7vw, 3.75rem);
-  max-width: 12ch;
+  max-width: 13ch;
 }
 
 .hero h1 span {
@@ -112,6 +123,85 @@ body {
 
 .hero-disclosure {
   margin-top: 10px;
+}
+
+.hero-paths {
+  width: min(360px, 38%);
+  min-width: 300px;
+  border: 1px solid #d5e1f2;
+  border-radius: 22px;
+  padding: 16px;
+  background: linear-gradient(180deg, #f9fbff 0%, #f5f9ff 100%);
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.hero-paths-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hero-paths-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.hero-path-card {
+  border: 1px solid #d9e4f5;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.hero-path-card.is-active {
+  border-color: #b8cbf6;
+  box-shadow: inset 0 0 0 1px rgba(20, 86, 240, 0.09);
+  background: #f7faff;
+}
+
+.hero-path-card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.hero-path-card p {
+  margin: 8px 0 0;
+  font-size: 0.86rem;
+  color: var(--ink-1);
+  line-height: 1.38;
+}
+
+.hero-path-card .btn {
+  margin-top: 10px;
+}
+
+.hero-path-preview {
+  border-top: 1px solid #d8e3f3;
+  padding-top: 10px;
+}
+
+.hero-path-preview h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-1);
+}
+
+.hero-path-preview ol {
+  margin: 8px 0 0;
+  padding-left: 17px;
+  display: grid;
+  gap: 6px;
+}
+
+.hero-path-preview li {
+  color: var(--ink-1);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .journey-panel {
@@ -713,6 +803,14 @@ body.compact-mode .panel {
   padding: 14px;
 }
 
+body.compact-mode .hero-layout {
+  gap: 12px;
+}
+
+body.compact-mode .hero-paths {
+  padding: 12px;
+}
+
 body.compact-mode .workbench-summary {
   padding: 10px;
 }
@@ -818,6 +916,19 @@ body.compact-mode .code-box {
 }
 
 @media (max-width: 900px) {
+  .hero-layout {
+    flex-direction: column;
+  }
+
+  .hero-paths {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .hero h1 {
+    max-width: 100%;
+  }
+
   .journey-grid {
     grid-template-columns: 1fr;
   }
@@ -871,6 +982,11 @@ body.compact-mode .code-box {
 
   .hero {
     padding: 22px;
+  }
+
+  .hero-paths {
+    padding: 12px;
+    border-radius: 16px;
   }
 
   .stats-grid {
