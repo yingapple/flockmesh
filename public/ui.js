@@ -24,7 +24,9 @@ const state = {
   replayDrift: null,
   timelineDiffBaseRunId: '',
   uiMode: 'starter',
-  compactMode: false
+  compactMode: false,
+  runtimeView: 'approvals',
+  workbenchSection: 'agent'
 };
 
 const DEMO_BOOTSTRAP_PRESET = Object.freeze({
@@ -48,6 +50,8 @@ const ONE_PERSON_QUICKSTART_TEMPLATES = Object.freeze({
 
 const UI_MODE_STORAGE_KEY = 'flockmesh_ui_mode';
 const UI_MODE_SET = new Set(['starter', 'advanced']);
+const RUNTIME_VIEW_SET = new Set(['approvals', 'runs']);
+const WORKBENCH_SECTION_SET = new Set(['agent', 'governance', 'observability']);
 
 const els = {
   bootstrapBtn: document.getElementById('bootstrapBtn'),
@@ -64,7 +68,15 @@ const els = {
   quickstartStartBtn: document.getElementById('quickstartStartBtn'),
   quickstartMeta: document.getElementById('quickstartMeta'),
   quickstartPayload: document.getElementById('quickstartPayload'),
+  runtimeFocusTag: document.getElementById('runtimeFocusTag'),
+  runtimeViewApprovalsBtn: document.getElementById('runtimeViewApprovalsBtn'),
+  runtimeViewRunsBtn: document.getElementById('runtimeViewRunsBtn'),
+  runtimeApprovalsPane: document.getElementById('runtimeApprovalsPane'),
+  runtimeRunsPane: document.getElementById('runtimeRunsPane'),
   advancedToolsOpenBtn: document.getElementById('advancedToolsOpenBtn'),
+  workbenchAgentTabBtn: document.getElementById('workbenchAgentTabBtn'),
+  workbenchGovernanceTabBtn: document.getElementById('workbenchGovernanceTabBtn'),
+  workbenchObservabilityTabBtn: document.getElementById('workbenchObservabilityTabBtn'),
   createAgentBtn: document.getElementById('createAgentBtn'),
   createBindingBtn: document.getElementById('createBindingBtn'),
   createRunBtn: document.getElementById('createRunBtn'),
@@ -335,9 +347,71 @@ function setUiMode(mode, { persist = true } = {}) {
 
   els.starterModeBtn.classList.toggle('is-active', nextMode === 'starter');
   els.advancedModeBtn.classList.toggle('is-active', nextMode === 'advanced');
+  els.starterModeBtn.classList.toggle('mode-hidden', nextMode !== 'advanced');
+  els.advancedModeBtn.classList.toggle('mode-hidden', nextMode !== 'starter');
 
   if (persist) {
     window.localStorage.setItem(UI_MODE_STORAGE_KEY, nextMode);
+  }
+}
+
+function setRuntimeView(view) {
+  const nextView = RUNTIME_VIEW_SET.has(view) ? view : 'approvals';
+  state.runtimeView = nextView;
+
+  const showApprovals = nextView === 'approvals';
+  els.runtimeApprovalsPane.classList.toggle('mode-hidden', !showApprovals);
+  els.runtimeRunsPane.classList.toggle('mode-hidden', showApprovals);
+  els.runtimeViewApprovalsBtn.classList.toggle('is-active', showApprovals);
+  els.runtimeViewRunsBtn.classList.toggle('is-active', !showApprovals);
+  els.runtimeViewApprovalsBtn.classList.toggle('btn-secondary', showApprovals);
+  els.runtimeViewApprovalsBtn.classList.toggle('btn-ghost', !showApprovals);
+  els.runtimeViewRunsBtn.classList.toggle('btn-secondary', !showApprovals);
+  els.runtimeViewRunsBtn.classList.toggle('btn-ghost', showApprovals);
+  els.runtimeFocusTag.textContent = showApprovals ? 'pending decisions' : 'active runs';
+}
+
+function listWorkbenchGroups() {
+  return Array.from(document.querySelectorAll('.workbench-group[data-workbench-section]'));
+}
+
+function setWorkbenchSection(section, { openSelected = true } = {}) {
+  const nextSection = WORKBENCH_SECTION_SET.has(section) ? section : 'agent';
+  state.workbenchSection = nextSection;
+
+  const groups = listWorkbenchGroups();
+  for (const group of groups) {
+    const isTarget = group.dataset.workbenchSection === nextSection;
+    group.classList.toggle('mode-hidden', !isTarget);
+    group.setAttribute('aria-hidden', isTarget ? 'false' : 'true');
+    if (isTarget && openSelected) group.open = true;
+    if (!isTarget) group.open = false;
+  }
+
+  els.workbenchAgentTabBtn.classList.toggle('is-active', nextSection === 'agent');
+  els.workbenchGovernanceTabBtn.classList.toggle('is-active', nextSection === 'governance');
+  els.workbenchObservabilityTabBtn.classList.toggle('is-active', nextSection === 'observability');
+  els.workbenchAgentTabBtn.classList.toggle('btn-secondary', nextSection === 'agent');
+  els.workbenchAgentTabBtn.classList.toggle('btn-ghost', nextSection !== 'agent');
+  els.workbenchGovernanceTabBtn.classList.toggle('btn-secondary', nextSection === 'governance');
+  els.workbenchGovernanceTabBtn.classList.toggle('btn-ghost', nextSection !== 'governance');
+  els.workbenchObservabilityTabBtn.classList.toggle('btn-secondary', nextSection === 'observability');
+  els.workbenchObservabilityTabBtn.classList.toggle('btn-ghost', nextSection !== 'observability');
+}
+
+function openPrimaryWorkbenchGroup() {
+  setWorkbenchSection('agent');
+}
+
+function setupWorkbenchDisclosure() {
+  const groups = listWorkbenchGroups();
+  if (!groups.length) return;
+
+  for (const group of groups) {
+    group.addEventListener('toggle', () => {
+      if (!group.open) return;
+      setWorkbenchSection(group.dataset.workbenchSection || 'agent', { openSelected: false });
+    });
   }
 }
 
@@ -1476,7 +1550,16 @@ function renderApprovalInbox() {
       await refreshTimelineForSelectedRun();
     });
 
-    actions.append(approveBtn, rejectBtn, inspectBtn);
+    const moreActions = document.createElement('details');
+    moreActions.className = 'card-actions-disclosure';
+    const moreSummary = document.createElement('summary');
+    moreSummary.textContent = 'More Actions';
+    const moreWrap = document.createElement('div');
+    moreWrap.className = 'run-actions run-actions-secondary';
+    moreWrap.append(rejectBtn, inspectBtn);
+    moreActions.append(moreSummary, moreWrap);
+
+    actions.append(approveBtn, moreActions);
     card.append(top, meta, progress, actions);
     els.approvalInbox.appendChild(card);
   }
@@ -1894,19 +1977,30 @@ function renderRunFeed() {
     node.querySelector('.run-meta').textContent = `${run.playbook_id} · ${run.trigger.source} · rev ${run.revision}`;
 
     const actionsWrap = node.querySelector('.run-actions');
+    const secondaryActions = [];
+
+    const inspectBtn = document.createElement('button');
+    inspectBtn.className = 'btn btn-secondary';
+    inspectBtn.textContent = 'Inspect Timeline';
+    inspectBtn.addEventListener('click', async () => {
+      state.selectedRunId = run.id;
+      refreshTimelineRunSelect();
+      await refreshTimelineForSelectedRun();
+    });
+    actionsWrap.append(inspectBtn);
 
     if (run.status === 'waiting_approval') {
       const approveBtn = document.createElement('button');
       approveBtn.className = 'btn btn-secondary';
       approveBtn.textContent = 'Approve';
       approveBtn.addEventListener('click', () => resolveRunApproval(run, true));
+      actionsWrap.append(approveBtn);
 
       const rejectBtn = document.createElement('button');
       rejectBtn.className = 'btn btn-danger';
       rejectBtn.textContent = 'Reject';
       rejectBtn.addEventListener('click', () => resolveRunApproval(run, false));
-
-      actionsWrap.append(approveBtn, rejectBtn);
+      secondaryActions.push(rejectBtn);
     }
 
     if (['accepted', 'running', 'waiting_approval'].includes(run.status)) {
@@ -1914,17 +2008,8 @@ function renderRunFeed() {
       cancelBtn.className = 'btn btn-danger';
       cancelBtn.textContent = 'Cancel Run';
       cancelBtn.addEventListener('click', () => resolveRunCancel(run));
-      actionsWrap.append(cancelBtn);
+      secondaryActions.push(cancelBtn);
     }
-
-    const inspectBtn = document.createElement('button');
-    inspectBtn.className = 'btn btn-ghost';
-    inspectBtn.textContent = 'Inspect Timeline';
-    inspectBtn.addEventListener('click', async () => {
-      state.selectedRunId = run.id;
-      refreshTimelineRunSelect();
-      await refreshTimelineForSelectedRun();
-    });
 
     const auditBtn = document.createElement('button');
     auditBtn.className = 'btn btn-ghost';
@@ -1937,13 +2022,24 @@ function renderRunFeed() {
         logAction('audit:error', String(err));
       }
     });
+    secondaryActions.push(auditBtn);
 
-    actionsWrap.append(inspectBtn, auditBtn);
+    if (secondaryActions.length) {
+      const moreActions = document.createElement('details');
+      moreActions.className = 'card-actions-disclosure';
+      const moreSummary = document.createElement('summary');
+      moreSummary.textContent = 'More Actions';
+      const moreWrap = document.createElement('div');
+      moreWrap.className = 'run-actions run-actions-secondary';
+      moreWrap.append(...secondaryActions);
+      moreActions.append(moreSummary, moreWrap);
+      actionsWrap.append(moreActions);
+    }
     els.runFeed.appendChild(node);
   }
 
   if (!state.runs.length) {
-    els.runFeed.innerHTML = '<p class="run-meta">No runs yet. Start with Bootstrap Demo Run.</p>';
+    els.runFeed.innerHTML = '<p class="run-meta">No runs yet. Start with Quickstart, or use Bootstrap Demo Run in Workbench.</p>';
   }
 }
 
@@ -1951,6 +2047,7 @@ function refreshRuntimeViews() {
   refreshStats();
   renderRunFeed();
   renderApprovalInbox();
+  setRuntimeView(state.runtimeView);
   refreshTimelineRunSelect();
 }
 
@@ -2332,9 +2429,26 @@ els.starterModeBtn.addEventListener('click', () => {
 });
 els.advancedModeBtn.addEventListener('click', () => {
   setUiMode('advanced');
+  openPrimaryWorkbenchGroup();
 });
 els.advancedToolsOpenBtn.addEventListener('click', () => {
   setUiMode('advanced');
+  openPrimaryWorkbenchGroup();
+});
+els.runtimeViewApprovalsBtn.addEventListener('click', () => {
+  setRuntimeView('approvals');
+});
+els.runtimeViewRunsBtn.addEventListener('click', () => {
+  setRuntimeView('runs');
+});
+els.workbenchAgentTabBtn.addEventListener('click', () => {
+  setWorkbenchSection('agent');
+});
+els.workbenchGovernanceTabBtn.addEventListener('click', () => {
+  setWorkbenchSection('governance');
+});
+els.workbenchObservabilityTabBtn.addEventListener('click', () => {
+  setWorkbenchSection('observability');
 });
 els.compactToggleBtn.addEventListener('click', () => {
   setCompactMode(!state.compactMode);
@@ -2410,7 +2524,13 @@ if (!parseCsvUnique(els.quickstartConnectorIdsInput.value).length) {
 }
 
 try {
+  setupWorkbenchDisclosure();
+  setRuntimeView('approvals');
+  setWorkbenchSection('agent');
   setUiMode(readInitialUiMode(), { persist: false });
+  if (state.uiMode === 'advanced') {
+    openPrimaryWorkbenchGroup();
+  }
   setCompactMode(readInitialCompactMode(), { persist: false });
   await Promise.all([
     loadHealth(),
