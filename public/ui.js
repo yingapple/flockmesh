@@ -287,7 +287,7 @@ function parseAuthRefsMap(value) {
   return map;
 }
 
-function setQuickstartTag(label, color = '#b9d4cc') {
+function setQuickstartTag(label, color = '#5f6b7f') {
   els.quickstartTag.textContent = label;
   els.quickstartTag.style.color = color;
 }
@@ -344,12 +344,12 @@ function setUiMode(mode, { persist = true } = {}) {
 const POLICY_PATCH_CAPABILITY_PATTERN = /^(\*|[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+)$/;
 const POLICY_PATCH_DECISION_SET = new Set(['allow', 'deny', 'escalate']);
 
-function setPolicyPatchTag(label, color = '#b9d4cc') {
+function setPolicyPatchTag(label, color = '#5f6b7f') {
   els.policyPatchTag.textContent = label;
   els.policyPatchTag.style.color = color;
 }
 
-function setPolicyRollbackTag(label, color = '#b9d4cc') {
+function setPolicyRollbackTag(label, color = '#5f6b7f') {
   els.policyRollbackTag.textContent = label;
   els.policyRollbackTag.style.color = color;
 }
@@ -704,11 +704,11 @@ async function loadPolicyProfiles({ preferredProfileName = '', setReadyTag = tru
     if (setReadyTag) {
       setPolicyPatchTag(
         state.policyProfiles.length ? 'profiles-ready' : 'profiles-empty',
-        state.policyProfiles.length ? '#5ae2a8' : '#ffb03a'
+        state.policyProfiles.length ? '#1d9a6c' : '#c17b23'
       );
       setPolicyRollbackTag(
         state.policyProfiles.length ? 'profiles-ready' : 'profiles-empty',
-        state.policyProfiles.length ? '#5ae2a8' : '#ffb03a'
+        state.policyProfiles.length ? '#1d9a6c' : '#c17b23'
       );
     }
     els.policyPatchMeta.textContent = `${state.policyProfiles.length} policy profiles loaded.`;
@@ -751,8 +751,8 @@ async function loadPolicyProfiles({ preferredProfileName = '', setReadyTag = tru
     state.policyRollbackHistory = [];
     refreshPolicyPatchProfileSelect();
     refreshPolicyRollbackProfileSelect();
-    setPolicyPatchTag('error', '#ff6b6b');
-    setPolicyRollbackTag('error', '#ff6b6b');
+    setPolicyPatchTag('error', '#d92d20');
+    setPolicyRollbackTag('error', '#d92d20');
     els.policyPatchMeta.textContent = String(err);
     els.policyRollbackMeta.textContent = String(err);
     if (!state.policyPatchResult) {
@@ -886,7 +886,7 @@ function applyPolicyPatchConflictHint(err, requestPayload) {
     expected_profile_hash: expectedHash,
     current_profile_hash: currentHash
   }, null, 2);
-  setPolicyPatchTag('hash-conflict', '#ffb03a');
+  setPolicyPatchTag('hash-conflict', '#c17b23');
   logAction('policy:patch:hash-conflict', {
     profile_name: profileName,
     expected_profile_hash: expectedHash,
@@ -903,7 +903,7 @@ async function runPolicyPatch(mode) {
       await refreshSelectedPolicyProfileVersion();
       requestPayload = buildPolicyPatchRequest(mode);
     }
-    setPolicyPatchTag(mode === 'apply' ? 'applying' : 'simulating', '#5fd1ff');
+    setPolicyPatchTag(mode === 'apply' ? 'applying' : 'simulating', '#1456f0');
     const payload = await api('/v0/policy/patch', {
       method: 'POST',
       body: JSON.stringify(requestPayload)
@@ -921,10 +921,10 @@ async function runPolicyPatch(mode) {
         setReadyTag: false
       });
       await refreshSelectedPolicyProfileVersion();
-      setPolicyPatchTag('applied', '#5ae2a8');
+      setPolicyPatchTag('applied', '#1d9a6c');
       els.policyPatchMeta.textContent = meta;
     } else {
-      setPolicyPatchTag('dry-run', '#ffb03a');
+      setPolicyPatchTag('dry-run', '#c17b23');
     }
 
     logAction(`policy:patch:${payload.mode}:${payload.profile_name}`, {
@@ -937,7 +937,7 @@ async function runPolicyPatch(mode) {
     if (applyPolicyPatchConflictHint(err, requestPayload)) {
       return;
     }
-    setPolicyPatchTag('error', '#ff6b6b');
+    setPolicyPatchTag('error', '#d92d20');
     els.policyPatchMeta.textContent = String(err);
     els.policyPatchPayload.textContent = String(err);
     logAction('policy:patch:error', String(err));
@@ -977,7 +977,7 @@ function applyPolicyRollbackConflictHint(err, requestPayload) {
     expected_profile_hash: expectedHash,
     current_profile_hash: currentHash
   }, null, 2);
-  setPolicyRollbackTag('hash-conflict', '#ffb03a');
+  setPolicyRollbackTag('hash-conflict', '#c17b23');
   logAction('policy:rollback:hash-conflict', {
     profile_name: profileName,
     expected_profile_hash: expectedHash,
@@ -995,7 +995,7 @@ async function runPolicyRollback(mode) {
       requestPayload = buildPolicyRollbackRequest(mode);
     }
 
-    setPolicyRollbackTag(mode === 'apply' ? 'applying' : 'simulating', '#5fd1ff');
+    setPolicyRollbackTag(mode === 'apply' ? 'applying' : 'simulating', '#1456f0');
     const payload = await api('/v0/policy/rollback', {
       method: 'POST',
       body: JSON.stringify(requestPayload)
@@ -1018,10 +1018,10 @@ async function runPolicyRollback(mode) {
         silent: true,
         updateMeta: false
       });
-      setPolicyRollbackTag('applied', '#5ae2a8');
+      setPolicyRollbackTag('applied', '#1d9a6c');
       els.policyRollbackMeta.textContent = meta;
     } else {
-      setPolicyRollbackTag('dry-run', '#ffb03a');
+      setPolicyRollbackTag('dry-run', '#c17b23');
       await loadPolicyRollbackHistory({
         profileName: payload.profile_name,
         silent: true,
@@ -1039,7 +1039,7 @@ async function runPolicyRollback(mode) {
     if (applyPolicyRollbackConflictHint(err, requestPayload)) {
       return;
     }
-    setPolicyRollbackTag('error', '#ff6b6b');
+    setPolicyRollbackTag('error', '#d92d20');
     els.policyRollbackMeta.textContent = String(err);
     els.policyRollbackPayload.textContent = String(err);
     logAction('policy:rollback:error', String(err));
@@ -1051,7 +1051,7 @@ function clearBlueprint(message) {
   state.blueprintLint = null;
   state.blueprintRemediation = null;
   els.blueprintTag.textContent = 'idle';
-  els.blueprintTag.style.color = '#b9d4cc';
+  els.blueprintTag.style.color = '#5f6b7f';
   els.blueprintMeta.textContent = message;
   els.blueprintPayload.textContent = message;
 }
@@ -1062,18 +1062,18 @@ function setBlueprintTagFromWarnings(warnings = []) {
 
   if (hasCritical) {
     els.blueprintTag.textContent = 'critical';
-    els.blueprintTag.style.color = '#ff6b6b';
+    els.blueprintTag.style.color = '#d92d20';
     return;
   }
 
   if (hasWarning) {
     els.blueprintTag.textContent = 'warning';
-    els.blueprintTag.style.color = '#ffb03a';
+    els.blueprintTag.style.color = '#c17b23';
     return;
   }
 
   els.blueprintTag.textContent = 'ready';
-  els.blueprintTag.style.color = '#5ae2a8';
+  els.blueprintTag.style.color = '#1d9a6c';
 }
 
 function refreshBlueprintKitSelect() {
@@ -1124,7 +1124,7 @@ async function loadAgentKits() {
     els.blueprintMeta.textContent = `${state.agentKits.length} kits loaded. Select one and preview blueprint.`;
     if (!state.blueprintPreview) {
       els.blueprintTag.textContent = state.agentKits.length ? 'catalog-ready' : 'catalog-empty';
-      els.blueprintTag.style.color = state.agentKits.length ? '#5ae2a8' : '#ffb03a';
+      els.blueprintTag.style.color = state.agentKits.length ? '#1d9a6c' : '#c17b23';
     }
   } catch (err) {
     state.agentKits = [];
@@ -1202,13 +1202,13 @@ async function lintAgentBlueprint() {
 
     if (payload.summary.status === 'fail') {
       els.blueprintTag.textContent = 'lint-fail';
-      els.blueprintTag.style.color = '#ff6b6b';
+      els.blueprintTag.style.color = '#d92d20';
     } else if (payload.summary.status === 'warn') {
       els.blueprintTag.textContent = 'lint-warn';
-      els.blueprintTag.style.color = '#ffb03a';
+      els.blueprintTag.style.color = '#c17b23';
     } else {
       els.blueprintTag.textContent = 'lint-pass';
-      els.blueprintTag.style.color = '#5ae2a8';
+      els.blueprintTag.style.color = '#1d9a6c';
     }
 
     logAction(`blueprint:lint:${payload.kit_id}`, {
@@ -1279,13 +1279,13 @@ async function remediateAgentBlueprint() {
 
     if (payload.summary.status_after_estimate === 'fail') {
       els.blueprintTag.textContent = 'remediation-fail';
-      els.blueprintTag.style.color = '#ff6b6b';
+      els.blueprintTag.style.color = '#d92d20';
     } else if (payload.summary.status_after_estimate === 'warn') {
       els.blueprintTag.textContent = 'remediation-warn';
-      els.blueprintTag.style.color = '#ffb03a';
+      els.blueprintTag.style.color = '#c17b23';
     } else {
       els.blueprintTag.textContent = 'remediation-pass';
-      els.blueprintTag.style.color = '#5ae2a8';
+      els.blueprintTag.style.color = '#1d9a6c';
     }
 
     if (!state.policyProfiles.length) {
@@ -1296,7 +1296,7 @@ async function remediateAgentBlueprint() {
       overwriteRules: false
     });
     if (adoptedPolicyCandidate) {
-      setPolicyPatchTag('drafted', '#ffb03a');
+      setPolicyPatchTag('drafted', '#c17b23');
       els.policyPatchMeta.textContent = `Drafted from remediation candidate ${adoptedPolicyCandidate.candidate_id} -> ${adoptedPolicyCandidate.target_profile}`;
     }
 
@@ -1405,10 +1405,10 @@ function renderAttestationSummary(summary) {
 
   if (summary.unverified > 0 || summary.highControlRisk > 0) {
     els.attestationTag.textContent = 'attention';
-    els.attestationTag.style.color = '#ffb03a';
+    els.attestationTag.style.color = '#c17b23';
   } else {
     els.attestationTag.textContent = 'verified';
-    els.attestationTag.style.color = '#5ae2a8';
+    els.attestationTag.style.color = '#1d9a6c';
   }
 }
 
@@ -1417,13 +1417,13 @@ function renderApprovalInbox() {
 
   if (!state.pendingApprovals.length) {
     els.approvalInboxTag.textContent = 'clear';
-    els.approvalInboxTag.style.color = '#5ae2a8';
+    els.approvalInboxTag.style.color = '#1d9a6c';
     els.approvalInbox.innerHTML = '<p class="run-meta">No pending approvals.</p>';
     return;
   }
 
   els.approvalInboxTag.textContent = `${state.pendingApprovals.length} pending`;
-  els.approvalInboxTag.style.color = '#ffb03a';
+  els.approvalInboxTag.style.color = '#c17b23';
 
   for (const item of state.pendingApprovals) {
     const card = document.createElement('article');
@@ -1438,7 +1438,7 @@ function renderApprovalInbox() {
     const risk = document.createElement('span');
     risk.className = 'tag';
     risk.textContent = item.risk_tier;
-    risk.style.color = item.risk_tier === 'R3' || item.risk_tier === 'R2' ? '#ffb03a' : '#5ae2a8';
+    risk.style.color = item.risk_tier === 'R3' || item.risk_tier === 'R2' ? '#c17b23' : '#1d9a6c';
 
     top.append(title, risk);
 
@@ -1484,7 +1484,7 @@ function renderApprovalInbox() {
 
 function clearTimeline(message) {
   els.timelineTag.textContent = 'idle';
-  els.timelineTag.style.color = '#b9d4cc';
+  els.timelineTag.style.color = '#5f6b7f';
   els.timelineMeta.textContent = message;
   els.timelineEventsPayload.textContent = message;
   els.timelineAuditPayload.textContent = message;
@@ -1506,7 +1506,7 @@ function clearReplayIntegrity(message) {
 
 function clearReplayDrift(message) {
   els.replayDriftTag.textContent = 'idle';
-  els.replayDriftTag.style.color = '#b9d4cc';
+  els.replayDriftTag.style.color = '#5f6b7f';
   els.replayDriftMeta.textContent = message;
   els.replayDriftPayload.textContent = message;
   state.replayDrift = null;
@@ -1514,7 +1514,7 @@ function clearReplayDrift(message) {
 
 function clearPolicyTrace(message) {
   els.policyTraceTag.textContent = 'idle';
-  els.policyTraceTag.style.color = '#b9d4cc';
+  els.policyTraceTag.style.color = '#5f6b7f';
   els.policyTracePayload.textContent = message;
 }
 
@@ -1544,11 +1544,11 @@ function renderPolicyTraceForRun(runId) {
   );
 
   if (summary.deny > 0) {
-    els.policyTraceTag.style.color = '#ff6b6b';
+    els.policyTraceTag.style.color = '#d92d20';
   } else if (summary.escalate > 0) {
-    els.policyTraceTag.style.color = '#ffb03a';
+    els.policyTraceTag.style.color = '#c17b23';
   } else {
-    els.policyTraceTag.style.color = '#5ae2a8';
+    els.policyTraceTag.style.color = '#1d9a6c';
   }
   els.policyTraceTag.textContent = `A${summary.allow} E${summary.escalate} D${summary.deny}`;
 
@@ -1673,7 +1673,7 @@ async function loadRunTimeline(runId) {
 
   try {
     els.timelineTag.textContent = 'loading';
-    els.timelineTag.style.color = '#5fd1ff';
+    els.timelineTag.style.color = '#1456f0';
 
     const [events, audit] = await Promise.all([
       api(`/v0/runs/${runId}/events`),
@@ -1690,11 +1690,11 @@ async function loadRunTimeline(runId) {
     const run = state.runs.find((item) => item.id === runId);
 
     els.timelineTag.textContent = `${eventCount}/${auditCount}`;
-    els.timelineTag.style.color = '#5ae2a8';
+    els.timelineTag.style.color = '#1d9a6c';
     els.timelineMeta.textContent = `${runId} · status ${run?.status || 'unknown'} · events ${eventCount} · audit ${auditCount}`;
   } catch (err) {
     els.timelineTag.textContent = 'error';
-    els.timelineTag.style.color = '#ff6b6b';
+    els.timelineTag.style.color = '#d92d20';
     els.timelineMeta.textContent = String(err);
     els.timelineEventsPayload.textContent = String(err);
     els.timelineAuditPayload.textContent = String(err);
@@ -1782,14 +1782,14 @@ async function loadReplayDriftSummary() {
     els.replayDriftMeta.textContent = `evaluated ${payload.totals.evaluated} · inconsistent ${payload.totals.inconsistent} · inconclusive ${payload.totals.inconclusive}`;
     if (payload.alert) {
       els.replayDriftTag.textContent = 'alert';
-      els.replayDriftTag.style.color = '#ff6b6b';
+      els.replayDriftTag.style.color = '#d92d20';
     } else {
       els.replayDriftTag.textContent = 'stable';
-      els.replayDriftTag.style.color = '#5ae2a8';
+      els.replayDriftTag.style.color = '#1d9a6c';
     }
   } catch (err) {
     els.replayDriftTag.textContent = 'error';
-    els.replayDriftTag.style.color = '#ff6b6b';
+    els.replayDriftTag.style.color = '#d92d20';
     els.replayDriftMeta.textContent = String(err);
     els.replayDriftPayload.textContent = String(err);
     state.replayDrift = null;
@@ -1814,11 +1814,11 @@ async function loadHealth() {
   try {
     const payload = await api('/health');
     els.healthTag.textContent = payload.ok ? 'healthy' : 'unhealthy';
-    els.healthTag.style.color = payload.ok ? '#5ae2a8' : '#ff6b6b';
+    els.healthTag.style.color = payload.ok ? '#1d9a6c' : '#d92d20';
     els.healthPayload.textContent = JSON.stringify(payload, null, 2);
   } catch (err) {
     els.healthTag.textContent = 'offline';
-    els.healthTag.style.color = '#ff6b6b';
+    els.healthTag.style.color = '#d92d20';
     els.healthPayload.textContent = String(err);
   }
 }
@@ -1839,18 +1839,18 @@ async function loadConnectorGovernance() {
 
     if (health.degraded > 0) {
       els.connectorHealthTag.textContent = `degraded ${health.degraded}`;
-      els.connectorHealthTag.style.color = '#ffb03a';
+      els.connectorHealthTag.style.color = '#c17b23';
     } else {
       els.connectorHealthTag.textContent = `healthy ${health.healthy}`;
-      els.connectorHealthTag.style.color = '#5ae2a8';
+      els.connectorHealthTag.style.color = '#1d9a6c';
     }
   } catch (err) {
     els.connectorHealthTag.textContent = 'offline';
-    els.connectorHealthTag.style.color = '#ff6b6b';
+    els.connectorHealthTag.style.color = '#d92d20';
     els.connectorHealthPayload.textContent = String(err);
     els.connectorDriftPayload.textContent = String(err);
     els.attestationTag.textContent = 'offline';
-    els.attestationTag.style.color = '#ff6b6b';
+    els.attestationTag.style.color = '#d92d20';
     els.attestationVerifiedCount.textContent = '-';
     els.attestationUnverifiedCount.textContent = '-';
     els.attestationMissingCount.textContent = '-';
@@ -1956,7 +1956,7 @@ function refreshRuntimeViews() {
 
 async function startOnePersonQuickstart() {
   try {
-    setQuickstartTag('running', '#ffb03a');
+    setQuickstartTag('running', '#c17b23');
     const templateId = selectedQuickstartTemplateId();
     const idempotencyKey = String(els.quickstartIdemInput.value || '').trim();
 
@@ -1974,7 +1974,7 @@ async function startOnePersonQuickstart() {
     state.quickstartResult = payload;
     els.quickstartPayload.textContent = JSON.stringify(payload, null, 2);
     els.quickstartMeta.textContent = `${payload.reused ? 'reused' : 'created'} · agent ${payload.created_agent.id} · run ${payload.run.id} · status ${payload.run.status}`;
-    setQuickstartTag(payload.reused ? 'reused' : 'completed', '#5ae2a8');
+    setQuickstartTag(payload.reused ? 'reused' : 'completed', '#1d9a6c');
 
     state.selectedRunId = payload.run.id;
     await Promise.all([
@@ -1991,7 +1991,7 @@ async function startOnePersonQuickstart() {
       run_status: payload.run.status
     });
   } catch (err) {
-    setQuickstartTag('error', '#ff6b6b');
+    setQuickstartTag('error', '#d92d20');
     els.quickstartMeta.textContent = String(err);
     els.quickstartPayload.textContent = String(err);
     logAction('quickstart:error', String(err));
@@ -2162,13 +2162,13 @@ els.policyPatchReloadBtn.addEventListener('click', async () => {
 els.policyPatchVersionBtn.addEventListener('click', async () => {
   try {
     await refreshSelectedPolicyProfileVersion({ updateMeta: true });
-    setPolicyPatchTag('version-ready', '#5ae2a8');
+    setPolicyPatchTag('version-ready', '#1d9a6c');
     logAction('policy:patch:version:refresh', {
       profile_name: selectedPolicyProfileName(),
       document_hash: els.policyPatchHashInput.value
     });
   } catch (err) {
-    setPolicyPatchTag('error', '#ff6b6b');
+    setPolicyPatchTag('error', '#d92d20');
     els.policyPatchMeta.textContent = String(err);
     logAction('policy:patch:version:error', String(err));
   }
@@ -2190,7 +2190,7 @@ els.policyPatchFromRemediationBtn.addEventListener('click', async () => {
       throw new Error('No policy_profile_patch candidate found in current remediation payload.');
     }
 
-    setPolicyPatchTag('drafted', '#ffb03a');
+    setPolicyPatchTag('drafted', '#c17b23');
     els.policyPatchMeta.textContent = `Drafted ${candidate.patch_rules.length} rules from ${candidate.candidate_id} -> ${candidate.target_profile}`;
     logAction('policy:patch:draft-from-remediation', {
       candidate_id: candidate.candidate_id,
@@ -2198,7 +2198,7 @@ els.policyPatchFromRemediationBtn.addEventListener('click', async () => {
       patch_rules: candidate.patch_rules.length
     });
   } catch (err) {
-    setPolicyPatchTag('error', '#ff6b6b');
+    setPolicyPatchTag('error', '#d92d20');
     els.policyPatchMeta.textContent = String(err);
     logAction('policy:patch:draft:error', String(err));
   }
@@ -2227,13 +2227,13 @@ els.policyRollbackReloadBtn.addEventListener('click', async () => {
       silent: false,
       updateMeta: true
     });
-    setPolicyRollbackTag('history-ready', '#5ae2a8');
+    setPolicyRollbackTag('history-ready', '#1d9a6c');
     logAction('policy:rollback:history:refresh', {
       profile_name: selectedPolicyRollbackProfileName(),
       history_entries: state.policyRollbackHistory.length
     });
   } catch (err) {
-    setPolicyRollbackTag('error', '#ff6b6b');
+    setPolicyRollbackTag('error', '#d92d20');
     els.policyRollbackMeta.textContent = String(err);
     logAction('policy:rollback:history:error', String(err));
   }
@@ -2241,13 +2241,13 @@ els.policyRollbackReloadBtn.addEventListener('click', async () => {
 els.policyRollbackVersionBtn.addEventListener('click', async () => {
   try {
     await refreshSelectedPolicyRollbackProfileVersion({ updateMeta: true });
-    setPolicyRollbackTag('version-ready', '#5ae2a8');
+    setPolicyRollbackTag('version-ready', '#1d9a6c');
     logAction('policy:rollback:version:refresh', {
       profile_name: selectedPolicyRollbackProfileName(),
       document_hash: els.policyRollbackHashInput.value
     });
   } catch (err) {
-    setPolicyRollbackTag('error', '#ff6b6b');
+    setPolicyRollbackTag('error', '#d92d20');
     els.policyRollbackMeta.textContent = String(err);
     logAction('policy:rollback:version:error', String(err));
   }
@@ -2262,7 +2262,7 @@ els.policyRollbackDraftLatestBtn.addEventListener('click', async () => {
       });
     }
     const latest = draftPolicyRollbackFromLatest();
-    setPolicyRollbackTag('drafted', '#ffb03a');
+    setPolicyRollbackTag('drafted', '#c17b23');
     els.policyRollbackMeta.textContent = `Drafted rollback target ${latest.patch_id} (before).`;
     logAction('policy:rollback:draft-latest', {
       profile_name: selectedPolicyRollbackProfileName(),
@@ -2270,7 +2270,7 @@ els.policyRollbackDraftLatestBtn.addEventListener('click', async () => {
       target_state: 'before'
     });
   } catch (err) {
-    setPolicyRollbackTag('error', '#ff6b6b');
+    setPolicyRollbackTag('error', '#d92d20');
     els.policyRollbackMeta.textContent = String(err);
     logAction('policy:rollback:draft:error', String(err));
   }
