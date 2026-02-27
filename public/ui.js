@@ -26,7 +26,8 @@ const state = {
   uiMode: 'starter',
   compactMode: false,
   runtimeView: 'approvals',
-  workbenchSection: 'agent'
+  workbenchSection: 'agent',
+  journeySetupConfirmed: false
 };
 
 const DEMO_BOOTSTRAP_PRESET = Object.freeze({
@@ -61,6 +62,7 @@ const els = {
   advancedModeBtn: document.getElementById('advancedModeBtn'),
   compactToggleBtn: document.getElementById('compactToggleBtn'),
   quickstartSection: document.getElementById('quickstartSection'),
+  runLaunchSection: document.getElementById('runLaunchSection'),
   runtimeFocusSection: document.getElementById('runtimeFocusSection'),
   journeyTag: document.getElementById('journeyTag'),
   journeyStepSetup: document.getElementById('journeyStepSetup'),
@@ -71,7 +73,11 @@ const els = {
   journeyReviewStatus: document.getElementById('journeyReviewStatus'),
   journeyGoSetupBtn: document.getElementById('journeyGoSetupBtn'),
   journeyStartRunBtn: document.getElementById('journeyStartRunBtn'),
+  journeyContinueToStartBtn: document.getElementById('journeyContinueToStartBtn'),
+  journeyBackToSetupBtn: document.getElementById('journeyBackToSetupBtn'),
   journeyReviewBtn: document.getElementById('journeyReviewBtn'),
+  runLaunchTag: document.getElementById('runLaunchTag'),
+  runLaunchSummary: document.getElementById('runLaunchSummary'),
   quickstartTag: document.getElementById('quickstartTag'),
   quickstartWorkspaceInput: document.getElementById('quickstartWorkspaceInput'),
   quickstartOwnerInput: document.getElementById('quickstartOwnerInput'),
@@ -401,28 +407,51 @@ function focusQuickstartSetup() {
     els.quickstartOwnerInput.focus();
     return;
   }
-  els.quickstartStartBtn.focus();
+  els.journeyContinueToStartBtn.focus();
 }
 
 function updateJourneyState() {
   const setupReady = quickstartSetupReady();
   const hasRuns = state.runs.length > 0;
   const pendingCount = state.pendingApprovals.length;
-  const activeStep = !setupReady ? 1 : (hasRuns ? 3 : 2);
+
+  if (!setupReady) {
+    state.journeySetupConfirmed = false;
+  }
+
+  const activeStep = !state.journeySetupConfirmed ? 1 : (hasRuns ? 3 : 2);
 
   els.journeyTag.textContent = `step ${activeStep}/3`;
-  els.journeySetupStatus.textContent = setupReady ? 'ready' : 'required';
-  els.journeyRunStatus.textContent = hasRuns ? 'done' : (setupReady ? 'next' : 'blocked');
+  els.journeySetupStatus.textContent = state.journeySetupConfirmed ? 'done' : (setupReady ? 'ready' : 'required');
+  els.journeyRunStatus.textContent = hasRuns ? 'done' : (state.journeySetupConfirmed ? 'next' : 'blocked');
   els.journeyReviewStatus.textContent = hasRuns ? (pendingCount ? `${pendingCount} pending` : 'ready') : 'locked';
 
+  els.journeyStepSetup.classList.toggle('mode-hidden', activeStep !== 1);
+  els.journeyStepRun.classList.toggle('mode-hidden', activeStep !== 2);
+  els.journeyStepReview.classList.toggle('mode-hidden', activeStep !== 3);
   els.journeyStepSetup.classList.toggle('is-active', activeStep === 1);
   els.journeyStepRun.classList.toggle('is-active', activeStep === 2);
   els.journeyStepReview.classList.toggle('is-active', activeStep === 3);
-  els.journeyStepSetup.classList.toggle('is-complete', setupReady);
+  els.journeyStepSetup.classList.toggle('is-complete', state.journeySetupConfirmed);
   els.journeyStepRun.classList.toggle('is-complete', hasRuns);
   els.journeyStepReview.classList.toggle('is-complete', hasRuns && pendingCount === 0);
 
-  els.journeyStartRunBtn.disabled = !setupReady;
+  const isStarterMode = state.uiMode === 'starter';
+  els.quickstartSection.classList.toggle('mode-hidden', !isStarterMode || activeStep !== 1);
+  els.runLaunchSection.classList.toggle('mode-hidden', !isStarterMode || activeStep !== 2);
+  els.runtimeFocusSection.classList.toggle('mode-hidden', !isStarterMode || activeStep !== 3);
+
+  const workspaceId = String(els.quickstartWorkspaceInput.value || '').trim() || '-';
+  const ownerId = String(els.quickstartOwnerInput.value || '').trim() || '-';
+  const templateId = selectedQuickstartTemplateId();
+  const template = ONE_PERSON_QUICKSTART_TEMPLATES[templateId];
+  els.runLaunchSummary.textContent = `Workspace ${workspaceId} · Owner ${ownerId} · Template ${template?.label || templateId}.`;
+  els.runLaunchTag.textContent = setupReady ? 'ready' : 'blocked';
+
+  els.journeyContinueToStartBtn.disabled = !setupReady;
+  els.journeyStartRunBtn.disabled = !state.journeySetupConfirmed || !setupReady;
+  els.quickstartStartBtn.disabled = !state.journeySetupConfirmed || !setupReady;
+  els.journeyBackToSetupBtn.disabled = !state.journeySetupConfirmed;
   els.journeyReviewBtn.disabled = !hasRuns;
   els.heroStartQuickstartBtn.disabled = !setupReady;
 }
@@ -430,6 +459,7 @@ function updateJourneyState() {
 function openRuntimeReview() {
   const preferred = state.pendingApprovals.length ? 'approvals' : 'runs';
   setRuntimeView(preferred);
+  updateJourneyState();
   els.runtimeFocusSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -2293,17 +2323,38 @@ els.heroStartQuickstartBtn.addEventListener('click', async () => {
     focusQuickstartSetup();
     return;
   }
+  if (!state.journeySetupConfirmed) {
+    state.journeySetupConfirmed = true;
+    updateJourneyState();
+    els.runLaunchSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    els.quickstartStartBtn.focus();
+    return;
+  }
   await startOnePersonQuickstart();
 });
 els.journeyGoSetupBtn.addEventListener('click', () => {
+  state.journeySetupConfirmed = false;
+  updateJourneyState();
   focusQuickstartSetup();
 });
-els.journeyStartRunBtn.addEventListener('click', async () => {
+els.journeyContinueToStartBtn.addEventListener('click', () => {
   if (!quickstartSetupReady()) {
     focusQuickstartSetup();
     return;
   }
-  await startOnePersonQuickstart();
+  state.journeySetupConfirmed = true;
+  updateJourneyState();
+  els.runLaunchSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  els.quickstartStartBtn.focus();
+});
+els.journeyStartRunBtn.addEventListener('click', () => {
+  els.runLaunchSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  els.quickstartStartBtn.focus();
+});
+els.journeyBackToSetupBtn.addEventListener('click', () => {
+  state.journeySetupConfirmed = false;
+  updateJourneyState();
+  focusQuickstartSetup();
 });
 els.journeyReviewBtn.addEventListener('click', () => {
   openRuntimeReview();
@@ -2325,7 +2376,7 @@ els.quickstartTemplateSelect.addEventListener('change', () => {
   if (!state.quickstartResult) {
     const templateId = selectedQuickstartTemplateId();
     const template = ONE_PERSON_QUICKSTART_TEMPLATES[templateId];
-    els.quickstartMeta.textContent = `Template ${template?.label || templateId} selected. Click Step 2 · Start Run.`;
+    els.quickstartMeta.textContent = `Template ${template?.label || templateId} selected. Click Continue To Step 2.`;
   }
   updateJourneyState();
 });

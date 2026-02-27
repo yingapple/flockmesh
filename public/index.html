@@ -57,15 +57,15 @@
             <p class="run-meta">Set workspace, owner, and template.</p>
             <button id="journeyGoSetupBtn" class="btn btn-secondary">Go To Setup</button>
           </article>
-          <article id="journeyStepRun" class="journey-step">
+          <article id="journeyStepRun" class="journey-step mode-hidden">
             <div class="journey-head">
               <h3>2. Start</h3>
               <span id="journeyRunStatus" class="tag">next</span>
             </div>
-            <p class="run-meta">Launch your first run with one click.</p>
-            <button id="journeyStartRunBtn" class="btn btn-ghost">Start Run</button>
+            <p class="run-meta">Confirm setup, then open launch panel.</p>
+            <button id="journeyStartRunBtn" class="btn btn-secondary">Open Step 2</button>
           </article>
-          <article id="journeyStepReview" class="journey-step">
+          <article id="journeyStepReview" class="journey-step mode-hidden">
             <div class="journey-head">
               <h3>3. Review</h3>
               <span id="journeyReviewStatus" class="tag">locked</span>
@@ -76,7 +76,7 @@
         </div>
       </section>
 
-      <section class="panel reveal" id="quickstartSection">
+      <section class="panel reveal" id="quickstartSection" data-ui-mode="starter">
         <div class="panel-head">
           <h2>Step 1 · Quickstart Setup</h2>
           <span id="quickstartTag" class="tag">ready</span>
@@ -91,7 +91,7 @@
             <option value="weekly_ops_sync">Weekly Ops Sync</option>
             <option value="incident_response">Incident Response</option>
           </select>
-          <button id="quickstartStartBtn" class="btn btn-secondary">Step 2 · Start Run</button>
+          <button id="journeyContinueToStartBtn" class="btn btn-secondary">Continue To Step 2</button>
         </div>
         <details class="advanced-tools-details progressive-disclosure">
           <summary>Optional setup</summary>
@@ -119,7 +119,21 @@
         </details>
       </section>
 
-      <section class="panel reveal" id="runtimeFocusSection">
+      <section class="panel reveal mode-hidden" id="runLaunchSection" data-ui-mode="starter">
+        <div class="panel-head">
+          <h2>Step 2 · Launch First Run</h2>
+          <span id="runLaunchTag" class="tag">ready</span>
+        </div>
+        <p id="runLaunchSummary" class="run-meta">
+          Confirm setup details, then launch your first run.
+        </p>
+        <div class="timeline-controls">
+          <button id="journeyBackToSetupBtn" class="btn btn-ghost">Back To Step 1</button>
+          <button id="quickstartStartBtn" class="btn btn-secondary">Start Run</button>
+        </div>
+      </section>
+
+      <section class="panel reveal mode-hidden" id="runtimeFocusSection" data-ui-mode="starter">
         <div class="panel-head">
           <h2>Step 3 · Runtime Focus</h2>
           <span id="runtimeFocusTag" class="tag">pending decisions</span>
