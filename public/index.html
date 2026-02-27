@@ -27,24 +27,58 @@
           Policy-first execution, optional ecosystem connectors, immutable audit.
         </p>
         <div class="hero-actions">
-          <button id="refreshBtn" class="btn btn-primary">Refresh State</button>
-          <button id="starterModeBtn" class="btn btn-ghost">Back To Focus</button>
+          <button id="heroStartQuickstartBtn" class="btn btn-primary" data-ui-mode="starter">Start First Run</button>
           <button id="advancedModeBtn" class="btn btn-ghost">Open Workbench</button>
         </div>
         <p class="hero-helper">
-          Keep one clear focus: use Starter for daily flow, then open one Advanced module group at a time.
+          New here? Follow 3 steps: Configure, Start, Review. One main action at a time.
         </p>
         <details class="advanced-tools-details progressive-disclosure hero-disclosure">
-          <summary>View display options</summary>
+          <summary>View additional options</summary>
           <div class="timeline-controls">
+            <button id="refreshBtn" class="btn btn-ghost">Refresh State</button>
+            <button id="starterModeBtn" class="btn btn-ghost">Back To Focus</button>
             <button id="compactToggleBtn" class="btn btn-ghost">Compact: Off</button>
           </div>
         </details>
       </header>
 
-      <section class="panel reveal">
+      <section class="panel reveal journey-panel" data-ui-mode="starter">
         <div class="panel-head">
-          <h2>One-person Quickstart</h2>
+          <h2>Start Here</h2>
+          <span id="journeyTag" class="tag">step 1/3</span>
+        </div>
+        <div class="journey-grid">
+          <article id="journeyStepSetup" class="journey-step is-active">
+            <div class="journey-head">
+              <h3>1. Configure</h3>
+              <span id="journeySetupStatus" class="tag">required</span>
+            </div>
+            <p class="run-meta">Set workspace, owner, and template.</p>
+            <button id="journeyGoSetupBtn" class="btn btn-secondary">Go To Setup</button>
+          </article>
+          <article id="journeyStepRun" class="journey-step">
+            <div class="journey-head">
+              <h3>2. Start</h3>
+              <span id="journeyRunStatus" class="tag">next</span>
+            </div>
+            <p class="run-meta">Launch your first run with one click.</p>
+            <button id="journeyStartRunBtn" class="btn btn-ghost">Start Run</button>
+          </article>
+          <article id="journeyStepReview" class="journey-step">
+            <div class="journey-head">
+              <h3>3. Review</h3>
+              <span id="journeyReviewStatus" class="tag">locked</span>
+            </div>
+            <p class="run-meta">Check pending decisions or run status.</p>
+            <button id="journeyReviewBtn" class="btn btn-ghost">Open Runtime Focus</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel reveal" id="quickstartSection">
+        <div class="panel-head">
+          <h2>Step 1 · Quickstart Setup</h2>
           <span id="quickstartTag" class="tag">ready</span>
         </div>
         <div class="timeline-controls quickstart-primary">
@@ -57,7 +91,7 @@
             <option value="weekly_ops_sync">Weekly Ops Sync</option>
             <option value="incident_response">Incident Response</option>
           </select>
-          <button id="quickstartStartBtn" class="btn btn-secondary">Start Quickstart</button>
+          <button id="quickstartStartBtn" class="btn btn-secondary">Step 2 · Start Run</button>
         </div>
         <details class="advanced-tools-details progressive-disclosure">
           <summary>Optional setup</summary>
@@ -85,9 +119,9 @@
         </details>
       </section>
 
-      <section class="panel reveal">
+      <section class="panel reveal" id="runtimeFocusSection">
         <div class="panel-head">
-          <h2>Runtime Focus</h2>
+          <h2>Step 3 · Runtime Focus</h2>
           <span id="runtimeFocusTag" class="tag">pending decisions</span>
         </div>
         <div class="mode-tabs">

@@ -55,10 +55,23 @@ const WORKBENCH_SECTION_SET = new Set(['agent', 'governance', 'observability']);
 
 const els = {
   bootstrapBtn: document.getElementById('bootstrapBtn'),
+  heroStartQuickstartBtn: document.getElementById('heroStartQuickstartBtn'),
   refreshBtn: document.getElementById('refreshBtn'),
   starterModeBtn: document.getElementById('starterModeBtn'),
   advancedModeBtn: document.getElementById('advancedModeBtn'),
   compactToggleBtn: document.getElementById('compactToggleBtn'),
+  quickstartSection: document.getElementById('quickstartSection'),
+  runtimeFocusSection: document.getElementById('runtimeFocusSection'),
+  journeyTag: document.getElementById('journeyTag'),
+  journeyStepSetup: document.getElementById('journeyStepSetup'),
+  journeyStepRun: document.getElementById('journeyStepRun'),
+  journeyStepReview: document.getElementById('journeyStepReview'),
+  journeySetupStatus: document.getElementById('journeySetupStatus'),
+  journeyRunStatus: document.getElementById('journeyRunStatus'),
+  journeyReviewStatus: document.getElementById('journeyReviewStatus'),
+  journeyGoSetupBtn: document.getElementById('journeyGoSetupBtn'),
+  journeyStartRunBtn: document.getElementById('journeyStartRunBtn'),
+  journeyReviewBtn: document.getElementById('journeyReviewBtn'),
   quickstartTag: document.getElementById('quickstartTag'),
   quickstartWorkspaceInput: document.getElementById('quickstartWorkspaceInput'),
   quickstartOwnerInput: document.getElementById('quickstartOwnerInput'),
@@ -369,6 +382,55 @@ function setRuntimeView(view) {
   els.runtimeViewRunsBtn.classList.toggle('btn-secondary', !showApprovals);
   els.runtimeViewRunsBtn.classList.toggle('btn-ghost', showApprovals);
   els.runtimeFocusTag.textContent = showApprovals ? 'pending decisions' : 'active runs';
+}
+
+function quickstartSetupReady() {
+  const workspaceId = String(els.quickstartWorkspaceInput.value || '').trim();
+  const ownerId = String(els.quickstartOwnerInput.value || '').trim();
+  const templateId = selectedQuickstartTemplateId();
+  return Boolean(workspaceId && ownerId && templateId);
+}
+
+function focusQuickstartSetup() {
+  els.quickstartSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!String(els.quickstartWorkspaceInput.value || '').trim()) {
+    els.quickstartWorkspaceInput.focus();
+    return;
+  }
+  if (!String(els.quickstartOwnerInput.value || '').trim()) {
+    els.quickstartOwnerInput.focus();
+    return;
+  }
+  els.quickstartStartBtn.focus();
+}
+
+function updateJourneyState() {
+  const setupReady = quickstartSetupReady();
+  const hasRuns = state.runs.length > 0;
+  const pendingCount = state.pendingApprovals.length;
+  const activeStep = !setupReady ? 1 : (hasRuns ? 3 : 2);
+
+  els.journeyTag.textContent = `step ${activeStep}/3`;
+  els.journeySetupStatus.textContent = setupReady ? 'ready' : 'required';
+  els.journeyRunStatus.textContent = hasRuns ? 'done' : (setupReady ? 'next' : 'blocked');
+  els.journeyReviewStatus.textContent = hasRuns ? (pendingCount ? `${pendingCount} pending` : 'ready') : 'locked';
+
+  els.journeyStepSetup.classList.toggle('is-active', activeStep === 1);
+  els.journeyStepRun.classList.toggle('is-active', activeStep === 2);
+  els.journeyStepReview.classList.toggle('is-active', activeStep === 3);
+  els.journeyStepSetup.classList.toggle('is-complete', setupReady);
+  els.journeyStepRun.classList.toggle('is-complete', hasRuns);
+  els.journeyStepReview.classList.toggle('is-complete', hasRuns && pendingCount === 0);
+
+  els.journeyStartRunBtn.disabled = !setupReady;
+  els.journeyReviewBtn.disabled = !hasRuns;
+  els.heroStartQuickstartBtn.disabled = !setupReady;
+}
+
+function openRuntimeReview() {
+  const preferred = state.pendingApprovals.length ? 'approvals' : 'runs';
+  setRuntimeView(preferred);
+  els.runtimeFocusSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function listWorkbenchGroups() {
@@ -2048,6 +2110,7 @@ function refreshRuntimeViews() {
   renderRunFeed();
   renderApprovalInbox();
   setRuntimeView(state.runtimeView);
+  updateJourneyState();
   refreshTimelineRunSelect();
 }
 
@@ -2079,6 +2142,7 @@ async function startOnePersonQuickstart() {
       loadConnectorGovernance()
     ]);
     refreshRuntimeViews();
+    openRuntimeReview();
     await refreshTimelineForSelectedRun();
 
     logAction(`quickstart:${templateId}`, {
@@ -2224,8 +2288,34 @@ async function bootstrapDemo() {
 }
 
 els.bootstrapBtn.addEventListener('click', bootstrapDemo);
+els.heroStartQuickstartBtn.addEventListener('click', async () => {
+  if (!quickstartSetupReady()) {
+    focusQuickstartSetup();
+    return;
+  }
+  await startOnePersonQuickstart();
+});
+els.journeyGoSetupBtn.addEventListener('click', () => {
+  focusQuickstartSetup();
+});
+els.journeyStartRunBtn.addEventListener('click', async () => {
+  if (!quickstartSetupReady()) {
+    focusQuickstartSetup();
+    return;
+  }
+  await startOnePersonQuickstart();
+});
+els.journeyReviewBtn.addEventListener('click', () => {
+  openRuntimeReview();
+});
 els.quickstartStartBtn.addEventListener('click', async () => {
   await startOnePersonQuickstart();
+});
+els.quickstartWorkspaceInput.addEventListener('input', () => {
+  updateJourneyState();
+});
+els.quickstartOwnerInput.addEventListener('input', () => {
+  updateJourneyState();
 });
 els.quickstartTemplateSelect.addEventListener('change', () => {
   if (!parseCsvUnique(els.quickstartConnectorIdsInput.value).length) {
@@ -2235,8 +2325,9 @@ els.quickstartTemplateSelect.addEventListener('change', () => {
   if (!state.quickstartResult) {
     const templateId = selectedQuickstartTemplateId();
     const template = ONE_PERSON_QUICKSTART_TEMPLATES[templateId];
-    els.quickstartMeta.textContent = `Template ${template?.label || templateId} selected. Click Start Quickstart.`;
+    els.quickstartMeta.textContent = `Template ${template?.label || templateId} selected. Click Step 2 · Start Run.`;
   }
+  updateJourneyState();
 });
 els.blueprintReloadBtn.addEventListener('click', async () => {
   await loadAgentKits();
@@ -2532,6 +2623,7 @@ try {
     openPrimaryWorkbenchGroup();
   }
   setCompactMode(readInitialCompactMode(), { persist: false });
+  updateJourneyState();
   await Promise.all([
     loadHealth(),
     syncState(),
