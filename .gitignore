@@ -2,6 +2,7 @@
 .env
 .env.*
 node_modules/
+skills/
 dist/
 build/
 coverage/
@@ -15,6 +16,7 @@ data/events/*.jsonl
 docs/marketing/
 
 data/*.db
+data/*.db-*
 data/policy-patches/*.jsonl
 !data/policy-patches/.gitkeep
 

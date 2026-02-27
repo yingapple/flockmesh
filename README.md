@@ -217,6 +217,26 @@ Then open:
 - Control Plane UI: `http://127.0.0.1:8080/`
 - Health: `http://127.0.0.1:8080/health`
 
+## UI Preview
+
+Desktop Hero:
+
+![FlockMesh Control Plane Hero](docs/ui/control-plane-hero.png)
+
+Desktop Full Overview:
+
+![FlockMesh Control Plane Overview](docs/ui/control-plane-overview.png)
+
+Mobile View:
+
+![FlockMesh Control Plane Mobile View](docs/ui/control-plane-mobile.png)
+
+Refresh screenshots:
+
+```bash
+npm run docs:ui-screenshots
+```
+
 Control Plane currently includes:
 
 - One-person Quickstart panel (`workspace + owner + template -> one-click provisioning + first run`)
