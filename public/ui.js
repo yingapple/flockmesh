@@ -52,7 +52,7 @@ const ONE_PERSON_QUICKSTART_TEMPLATES = Object.freeze({
 
 const JOURNEY_PATH_PRESETS = Object.freeze({
   startup: Object.freeze({
-    label: '创业公司路径',
+    label: 'Startup Team Path',
     workspaceId: 'wsp_startup_launch',
     ownerId: 'usr_founder_ops',
     templateId: 'incident_response',
@@ -60,7 +60,7 @@ const JOURNEY_PATH_PRESETS = Object.freeze({
     idempotencyPrefix: 'idem_startup_first_run'
   }),
   opc: Object.freeze({
-    label: 'OPC 路径',
+    label: 'OPC Path',
     workspaceId: 'wsp_one_person_company',
     ownerId: 'usr_solo_builder',
     templateId: 'weekly_ops_sync',
