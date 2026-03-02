@@ -202,6 +202,7 @@ What we extend:
 - Mainline Review: `docs/mainline-review.md`
 - MCP Compatibility Notes: `docs/mcp-compatibility.md`
 - Compatibility Matrix: `docs/compatibility-matrix.md`
+- Agent IDE Bridge: `docs/agent-ide-bridge.md`
 - v0 API Contracts: `spec/README.md`
 - Implementation TODO: `TODO.md`
 
@@ -260,6 +261,7 @@ Control Plane currently includes:
 - Agent blueprint remediation plan API: `POST /v0/agent-blueprints/remediation-plan`
 - Agent blueprint apply API: `POST /v0/agent-blueprints/apply`
 - One-person quickstart API: `POST /v0/quickstart/one-person`
+- Agent IDE bridge profile API: `GET /v0/integrations/agent-ide-profile`
 - Policy patch console (profile catalog + remediation draft + dry-run/apply + hash guard)
 - Policy rollback console (history preview + draft latest + dry-run/apply + hash guard)
 - Policy profile version API: `GET /v0/policy/profiles/{profile_name}/version`
@@ -356,6 +358,29 @@ Remediation plan includes `policy_candidates` with `direct/manual/informational`
   ]
 }
 ```
+
+Codex/Claude Code bridge (high-integration core):
+
+```bash
+# 1) Generate an IDE bridge profile (command + env + core enterprise tools)
+curl -s "http://127.0.0.1:8080/v0/integrations/agent-ide-profile?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple" | jq
+
+# 2) Launch MCP stdio bridge directly (for local client wiring)
+FLOCKMESH_ROOT_DIR="$(pwd)" \
+FLOCKMESH_WORKSPACE_ID="wsp_mindverse_cn" \
+FLOCKMESH_ACTOR_ID="usr_yingapple" \
+npm run mcp:bridge
+```
+
+Bridge toolset is intentionally small and enterprise-first:
+
+- `flockmesh_quickstart_one_person`
+- `flockmesh_invoke_mcp_tool`
+- `flockmesh_list_pending_approvals`
+- `flockmesh_resolve_approval`
+- `flockmesh_get_run_audit`
+
+This keeps integration tight with Codex/Claude Code while preserving policy/approval/audit as hard gates.
 
 Run tests:
 

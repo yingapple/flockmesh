@@ -1264,6 +1264,41 @@ test('mcp allowlist endpoint returns workspace-scoped rules', async () => {
   }
 });
 
+test('agent ide profile endpoint returns stdio bridge config and filtered allowlists', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v0/integrations/agent-ide-profile?workspace_id=wsp_mindverse_cn&agent_id=agt_mindverse_ops&actor_id=usr_yingapple'
+    });
+
+    assert.equal(res.statusCode, 200);
+    const payload = res.json();
+    assert.equal(payload.integration, 'agent_ide_bridge');
+    assert.equal(payload.workspace_id, 'wsp_mindverse_cn');
+    assert.equal(payload.agent_id, 'agt_mindverse_ops');
+    assert.equal(payload.actor_id, 'usr_yingapple');
+    assert.equal(payload.mcp_bridge.transport, 'stdio');
+    assert.equal(payload.mcp_bridge.command, 'node');
+    assert.deepEqual(payload.mcp_bridge.args, ['src/mcp-bridge-stdio.js']);
+    assert.equal(payload.mcp_bridge.env.FLOCKMESH_WORKSPACE_ID, 'wsp_mindverse_cn');
+    assert.equal(payload.mcp_bridge.env.FLOCKMESH_AGENT_ID, 'agt_mindverse_ops');
+    assert.equal(payload.mcp_bridge.env.FLOCKMESH_ACTOR_ID, 'usr_yingapple');
+    assert.ok(Array.isArray(payload.core_tools));
+    assert.ok(payload.core_tools.includes('flockmesh_invoke_mcp_tool'));
+    assert.ok(Array.isArray(payload.mcp_allowlists));
+    assert.ok(
+      payload.mcp_allowlists.some((doc) =>
+        doc.rules.some((rule) => rule.workspace_id === 'wsp_mindverse_cn')
+      )
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 test('connector rate-limit endpoint returns effective policy', async () => {
   const app = createTestApp({
     connectorRateLimitPolicy: {

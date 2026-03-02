@@ -55,6 +55,7 @@ import {
   listAgentKits,
   makeBlueprintAuthRef
 } from './lib/agent-kits.js';
+import { MCP_BRIDGE_TOOL_DEFINITIONS } from './lib/mcp-bridge-core.js';
 import {
   buildDefaultActionIntents,
   buildExecutionResult,
@@ -89,6 +90,9 @@ const POLICY_DECISION_WEIGHT = {
   escalate: 2,
   deny: 3
 };
+const MCP_BRIDGE_STDIO_COMMAND = 'node';
+const MCP_BRIDGE_STDIO_ARGS = ['src/mcp-bridge-stdio.js'];
+const MCP_BRIDGE_CORE_TOOL_NAMES = MCP_BRIDGE_TOOL_DEFINITIONS.map((item) => item.name);
 
 function sha256(payload) {
   return `sha256:${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
@@ -983,6 +987,46 @@ function evaluateMcpAllowlistForRequest({ app, body, connectorId }) {
     sideEffect: body.side_effect,
     riskHint: body.risk_hint
   });
+}
+
+function buildAgentIdeBridgeProfile({
+  workspaceId = '',
+  agentId = '',
+  actorId = '',
+  rootDir = '',
+  allowlists = []
+} = {}) {
+  const normalizedWorkspaceId = String(workspaceId || '').trim();
+  const normalizedAgentId = String(agentId || '').trim();
+  const normalizedActorId = String(actorId || '').trim() || 'usr_yingapple';
+  const normalizedRootDir = path.resolve(String(rootDir || defaultProjectRoot));
+
+  return {
+    version: 'v0',
+    integration: 'agent_ide_bridge',
+    workspace_id: normalizedWorkspaceId,
+    agent_id: normalizedAgentId || null,
+    actor_id: normalizedActorId,
+    mcp_bridge: {
+      transport: 'stdio',
+      command: MCP_BRIDGE_STDIO_COMMAND,
+      args: MCP_BRIDGE_STDIO_ARGS,
+      env: {
+        FLOCKMESH_ROOT_DIR: normalizedRootDir,
+        FLOCKMESH_WORKSPACE_ID: normalizedWorkspaceId,
+        ...(normalizedAgentId ? { FLOCKMESH_AGENT_ID: normalizedAgentId } : {}),
+        FLOCKMESH_ACTOR_ID: normalizedActorId
+      }
+    },
+    core_tools: MCP_BRIDGE_CORE_TOOL_NAMES,
+    mcp_allowlists: allowlists,
+    enterprise_guardrails: [
+      'workspace/agent MCP allowlist',
+      'policy-gated side effects (fail-closed)',
+      'connector invoke rate-limit guardrail',
+      'immutable audit for every approval and invoke'
+    ]
+  };
 }
 
 function buildPolicyTraceSummary(decisions = []) {
@@ -2450,6 +2494,45 @@ export function buildApp({
       total: items.length,
       items
     };
+  });
+
+  app.get('/v0/integrations/agent-ide-profile', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          agent_id: { type: 'string', pattern: '^agt_[A-Za-z0-9_-]{6,64}$' },
+          actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' }
+        }
+      }
+    }
+  }, async (request) => {
+    const workspaceId = request.query?.workspace_id || '';
+    const agentId = request.query?.agent_id || '';
+    const actorId = request.query?.actor_id || '';
+
+    const allowlists = app.mcpAllowlists
+      .map((doc) => ({
+        version: doc.version,
+        name: doc.name,
+        rules: doc.rules.filter((rule) => {
+          if (rule.workspace_id !== workspaceId) return false;
+          if (agentId && ![agentId, '*'].includes(rule.agent_id)) return false;
+          return true;
+        })
+      }))
+      .filter((doc) => doc.rules.length > 0);
+
+    return buildAgentIdeBridgeProfile({
+      workspaceId,
+      agentId,
+      actorId,
+      rootDir,
+      allowlists
+    });
   });
 
   app.get('/v0/connectors/rate-limits', {

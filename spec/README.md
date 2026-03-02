@@ -75,6 +75,7 @@ Implemented API surfaces in v0 runtime:
 - `GET /v0/connectors/health`
 - `GET /v0/connectors/drift`
 - `GET /v0/connectors/mcp/allowlists`
+- `GET /v0/integrations/agent-ide-profile`
 - `GET /v0/connectors/rate-limits`
 - `POST /v0/connectors/adapters/{connector_id}/simulate`
 - `POST /v0/connectors/adapters/{connector_id}/invoke`

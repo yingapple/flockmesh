@@ -591,6 +591,72 @@ paths:
                     items:
                       type: object
 
+  /v0/integrations/agent-ide-profile:
+    get:
+      operationId: getAgentIdeProfile
+      summary: Generate MCP stdio bridge profile for Codex/Claude Code enterprise workflows
+      parameters:
+        - in: query
+          name: workspace_id
+          required: true
+          schema:
+            type: string
+            pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: agent_id
+          required: false
+          schema:
+            type: string
+            pattern: ^agt_[A-Za-z0-9_-]{6,64}$
+        - in: query
+          name: actor_id
+          required: false
+          schema:
+            type: string
+            pattern: ^usr_[A-Za-z0-9_-]{4,64}$
+      responses:
+        "200":
+          description: Agent IDE bridge profile with core tools and guardrails
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - version
+                  - integration
+                  - workspace_id
+                  - actor_id
+                  - mcp_bridge
+                  - core_tools
+                  - mcp_allowlists
+                  - enterprise_guardrails
+                properties:
+                  version:
+                    type: string
+                  integration:
+                    type: string
+                  workspace_id:
+                    type: string
+                  agent_id:
+                    type: [string, "null"]
+                  actor_id:
+                    type: string
+                  mcp_bridge:
+                    type: object
+                  core_tools:
+                    type: array
+                    items:
+                      type: string
+                  mcp_allowlists:
+                    type: array
+                    items:
+                      type: object
+                  enterprise_guardrails:
+                    type: array
+                    items:
+                      type: string
+
   /v0/connectors/rate-limits:
     get:
       operationId: getConnectorRateLimits
