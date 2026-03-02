@@ -8,6 +8,14 @@ This bridge turns FlockMesh into a focused MCP server for enterprise workflows.
 - Add enterprise guardrails (`allowlist`, `policy`, `approval`, `audit`)
 - Keep tool surface intentionally small
 
+## Minimal Setup (Recommended)
+
+1. Fetch one profile from `GET /v0/integrations/agent-ide-profile`.
+2. Use returned `mcp_bridge.command + args + cwd + env` directly in Codex/Claude Code.
+3. Start with core tools only (`quickstart -> invoke -> approvals -> audit`).
+
+You do not need to manually set protocol headers for normal use.
+
 ## Start Stdio Bridge
 
 ```bash
@@ -34,22 +42,26 @@ Initialize:
 
 ```bash
 curl -i -s http://127.0.0.1:8080/v0/mcp/stream \
-  -H 'mcp-protocol-version: 2025-11-25' \
   -H 'content-type: application/json' \
-  -H 'authorization: Bearer replace-with-strong-token' \
-  -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"codex","version":"1.0.0"}}}'
+  -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"codex","version":"1.0.0"}}}'
 ```
 
 Reuse the returned `mcp-session-id` for follow-up calls:
 
 ```bash
 curl -s http://127.0.0.1:8080/v0/mcp/stream \
-  -H 'mcp-protocol-version: 2025-11-25' \
   -H 'content-type: application/json' \
-  -H 'authorization: Bearer replace-with-strong-token' \
   -H 'mcp-session-id: mcp_session_xxx' \
   -d '{"jsonrpc":"2.0","id":"list-1","method":"tools/list","params":{}}' | jq
 ```
+
+If bearer auth is enabled, add:
+
+- `-H 'authorization: Bearer replace-with-strong-token'`
+
+Optional advanced header for explicit protocol pinning:
+
+- `-H 'mcp-protocol-version: 2025-11-25'`
 
 ## Discover Profile
 

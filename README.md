@@ -9,6 +9,12 @@ The product center is no longer "chat channel". The center is `Agent + Connector
 
 FlockMesh is not a new chat tool. It is an organization-grade `Agent Collaboration Operation Layer` with optional office-system connectivity, policy-controlled permissions, and end-to-end auditability.
 
+## Why This Repo Is Named `FlockMesh`
+
+- `Flock`: collaboration is many humans and many agents moving together toward one outcome.
+- `Mesh`: execution touches many systems, but through one governed network (`connector + policy + approval + audit`).
+- The name intentionally avoids chat-first wording. It emphasizes coordinated execution, not message volume.
+
 ## Manifesto
 
 - Collaboration should be outcome-first, not message-first.
@@ -88,6 +94,12 @@ This is the default path for a user's office agent:
 7. All requests, approvals, tool calls, and outputs are written to the audit ledger.
 
 This keeps automation useful without turning the system into an ungoverned black box.
+
+## Simplicity Promise
+
+- New users keep one default path: `Configure -> Start -> Review`.
+- Starter mode exposes one primary action at a time; advanced surfaces stay folded.
+- Enterprise guardrails are added at runtime, not as extra first-time setup burden.
 
 ## Migration Story (No Big-Bang Rewrite)
 
@@ -363,26 +375,25 @@ Remediation plan includes `policy_candidates` with `direct/manual/informational`
 Codex/Claude Code bridge (high-integration core):
 
 ```bash
-# 1) Generate an IDE bridge profile (command + env + core enterprise tools)
+# 1) Generate one IDE bridge profile (recommended source of truth)
 curl -s "http://127.0.0.1:8080/v0/integrations/agent-ide-profile?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple" | jq
 
-# 2) Launch MCP stdio bridge directly (profile now includes absolute script path + cwd)
+# 2) Launch MCP stdio bridge directly
 FLOCKMESH_ROOT_DIR="$(pwd)" \
 FLOCKMESH_WORKSPACE_ID="wsp_mindverse_cn" \
 FLOCKMESH_ACTOR_ID="usr_yingapple" \
 npm run mcp:bridge
 
-# 3) Or open stream endpoint (GET) and issue JSON-RPC calls (POST)
-curl -s http://127.0.0.1:8080/v0/mcp/stream \
-  -H 'mcp-protocol-version: 2025-11-25'
-
+# 3) Or call MCP over HTTP JSON-RPC (minimal form)
 curl -i -s http://127.0.0.1:8080/v0/mcp/stream \
   -H 'content-type: application/json' \
-  -H 'mcp-protocol-version: 2025-11-25' \
-  -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"codex","version":"1.0.0"}}}'
+  -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"codex","version":"1.0.0"}}}'
 ```
 
-Optional: set `FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN` to require `Authorization: Bearer <token>` on `/v0/mcp/stream`.
+Optional advanced controls:
+
+- `FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN` to require `Authorization: Bearer <token>` on `/v0/mcp/stream`
+- `mcp-protocol-version` request header to pin protocol revision explicitly
 
 Bridge toolset is intentionally small and enterprise-first:
 
