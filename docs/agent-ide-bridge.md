@@ -19,7 +19,10 @@ npm run mcp:bridge
 
 ## Use Streamable HTTP Bridge
 
-HTTP endpoint: `POST /v0/mcp/stream`
+HTTP endpoints:
+
+- `GET /v0/mcp/stream` (event stream handshake)
+- `POST /v0/mcp/stream` (JSON-RPC requests)
 
 Optional bearer auth:
 
@@ -31,15 +34,17 @@ Initialize:
 
 ```bash
 curl -i -s http://127.0.0.1:8080/v0/mcp/stream \
+  -H 'mcp-protocol-version: 2025-11-25' \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer replace-with-strong-token' \
-  -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"codex","version":"1.0.0"}}}'
+  -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"codex","version":"1.0.0"}}}'
 ```
 
 Reuse the returned `mcp-session-id` for follow-up calls:
 
 ```bash
 curl -s http://127.0.0.1:8080/v0/mcp/stream \
+  -H 'mcp-protocol-version: 2025-11-25' \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer replace-with-strong-token' \
   -H 'mcp-session-id: mcp_session_xxx' \
@@ -54,8 +59,8 @@ curl -s "http://127.0.0.1:8080/v0/integrations/agent-ide-profile?workspace_id=ws
 
 The profile returns:
 
-- stdio command/args/env for MCP mounting
-- streamable HTTP endpoint metadata
+- stdio command/args/cwd/env for MCP mounting
+- streamable HTTP endpoint metadata (`endpoint`, absolute `url`, and `protocol_version`)
 - core bridge tools
 - workspace/agent filtered MCP allowlist snapshot
 

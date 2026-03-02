@@ -1,7 +1,7 @@
 import { buildApp } from './app.js';
 import { createMcpBridgeCore } from './lib/mcp-bridge-core.js';
 
-const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
+const DEFAULT_PROTOCOL_VERSION = '2025-11-25';
 
 const rootDir = process.env.FLOCKMESH_ROOT_DIR || process.cwd();
 const workspaceId = process.env.FLOCKMESH_WORKSPACE_ID || 'wsp_mindverse_cn';

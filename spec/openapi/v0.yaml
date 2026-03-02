@@ -658,12 +658,62 @@ paths:
                       type: string
 
   /v0/mcp/stream:
+    get:
+      operationId: getMcpStreamBridge
+      summary: Open streamable HTTP MCP event stream endpoint
+      parameters:
+        - in: header
+          name: mcp-session-id
+          required: false
+          schema:
+            type: string
+          description: Existing MCP session id from initialize.
+        - in: header
+          name: mcp-protocol-version
+          required: false
+          schema:
+            type: string
+          description: Requested MCP protocol version.
+        - in: header
+          name: authorization
+          required: false
+          schema:
+            type: string
+          description: Optional `Bearer` token header when bridge auth is enabled.
+      responses:
+        "200":
+          description: Event stream handshake payload for MCP stream transport.
+          headers:
+            mcp-session-id:
+              description: Echoed MCP session identifier when provided and valid.
+              schema:
+                type: string
+            mcp-protocol-version:
+              description: Negotiated MCP protocol version.
+              schema:
+                type: string
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          description: Unauthorized MCP bridge request.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [message]
+                properties:
+                  message:
+                    type: string
     post:
       operationId: postMcpStreamBridge
       summary: Streamable HTTP MCP bridge endpoint for Codex/Claude Code clients
       description: |
         JSON-RPC MCP endpoint supporting initialize, notifications/initialized, ping,
-        tools/list, and tools/call with session header reuse (`mcp-session-id`).
+        tools/list, and tools/call with session header reuse (`mcp-session-id`) and
+        negotiated protocol header (`mcp-protocol-version`).
       parameters:
         - in: header
           name: mcp-session-id
@@ -671,6 +721,12 @@ paths:
           schema:
             type: string
           description: MCP bridge session id returned from initialize.
+        - in: header
+          name: mcp-protocol-version
+          required: false
+          schema:
+            type: string
+          description: Requested MCP protocol version.
         - in: header
           name: authorization
           required: false
@@ -690,6 +746,10 @@ paths:
           headers:
             mcp-session-id:
               description: Session identifier for subsequent MCP bridge requests.
+              schema:
+                type: string
+            mcp-protocol-version:
+              description: Negotiated MCP protocol version.
               schema:
                 type: string
           content:
@@ -1282,8 +1342,14 @@ paths:
   /v0/runs:
     get:
       operationId: listRuns
-      summary: List runs (optional status filter)
+      summary: List runs (optional workspace/status filters)
       parameters:
+        - in: query
+          name: workspace_id
+          required: false
+          schema:
+            type: string
+            pattern: ^wsp_[A-Za-z0-9_-]{6,64}$
         - in: query
           name: status
           required: false

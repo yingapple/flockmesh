@@ -95,3 +95,50 @@ test('mcp bridge core runs enterprise flow: quickstart -> invoke -> approval', a
     await app.close();
   }
 });
+
+test('mcp bridge core pending approval listing stays workspace-scoped under pagination pressure', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const bridge = createMcpBridgeCore({
+      app,
+      defaults: {
+        workspaceId: 'wsp_mindverse_cn',
+        actorId: 'usr_yingapple'
+      }
+    });
+
+    const targetQuickstart = await bridge.callTool('flockmesh_quickstart_one_person', {
+      workspace_id: 'wsp_mindverse_cn',
+      owner_id: 'usr_yingapple',
+      template_id: 'weekly_ops_sync',
+      connector_ids: ['con_feishu_official', 'con_mcp_gateway'],
+      idempotency_key: `idem_mcp_bridge_target_${Date.now().toString(36)}`
+    });
+    assert.equal(targetQuickstart.run.workspace_id, 'wsp_mindverse_cn');
+
+    for (let index = 0; index < 3; index += 1) {
+      const outsider = await bridge.callTool('flockmesh_quickstart_one_person', {
+        workspace_id: 'wsp_other_suite',
+        owner_id: 'usr_yingapple',
+        template_id: 'weekly_ops_sync',
+        connector_ids: ['con_feishu_official', 'con_mcp_gateway'],
+        idempotency_key: `idem_mcp_bridge_other_${Date.now().toString(36)}_${index}`
+      });
+      assert.equal(outsider.run.workspace_id, 'wsp_other_suite');
+    }
+
+    const scoped = await bridge.callTool('flockmesh_list_pending_approvals', {
+      workspace_id: 'wsp_mindverse_cn',
+      limit: 1,
+      offset: 0
+    });
+    assert.equal(scoped.workspace_id, 'wsp_mindverse_cn');
+    assert.equal(scoped.total >= 1, true);
+    assert.ok(scoped.items.every((item) => item.workspace_id === 'wsp_mindverse_cn'));
+    assert.ok(scoped.items.some((item) => item.run_id === targetQuickstart.run.id));
+  } finally {
+    await app.close();
+  }
+});

@@ -1281,9 +1281,12 @@ test('agent ide profile endpoint returns stdio bridge config and filtered allowl
     assert.equal(payload.agent_id, 'agt_mindverse_ops');
     assert.equal(payload.actor_id, 'usr_yingapple');
     assert.equal(payload.mcp_bridge.transport, 'stdio');
-    assert.equal(payload.mcp_bridge.command, 'node');
-    assert.deepEqual(payload.mcp_bridge.args, ['src/mcp-bridge-stdio.js']);
+    assert.equal(payload.mcp_bridge.command, process.execPath);
+    assert.deepEqual(payload.mcp_bridge.args, [path.resolve(process.cwd(), 'src/mcp-bridge-stdio.js')]);
+    assert.equal(payload.mcp_bridge.cwd, process.cwd());
     assert.equal(payload.mcp_bridge.streamable_http.endpoint, '/v0/mcp/stream');
+    assert.ok(String(payload.mcp_bridge.streamable_http.url || '').endsWith('/v0/mcp/stream'));
+    assert.equal(payload.mcp_bridge.streamable_http.protocol_version, '2025-11-25');
     assert.equal(Object.hasOwn(payload.mcp_bridge.streamable_http, 'auth'), false);
     assert.equal(payload.mcp_bridge.env.FLOCKMESH_WORKSPACE_ID, 'wsp_mindverse_cn');
     assert.equal(payload.mcp_bridge.env.FLOCKMESH_AGENT_ID, 'agt_mindverse_ops');
@@ -1296,6 +1299,26 @@ test('agent ide profile endpoint returns stdio bridge config and filtered allowl
         doc.rules.some((rule) => rule.workspace_id === 'wsp_mindverse_cn')
       )
     );
+  } finally {
+    await app.close();
+  }
+});
+
+test('agent ide profile endpoint honors configured public base url for streamable HTTP metadata', async () => {
+  const app = createTestApp({
+    mcpBridgePublicBaseUrl: 'https://bridge.example.com/'
+  });
+  await app.ready();
+
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v0/integrations/agent-ide-profile?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple'
+    });
+
+    assert.equal(res.statusCode, 200);
+    const payload = res.json();
+    assert.equal(payload.mcp_bridge.streamable_http.url, 'https://bridge.example.com/v0/mcp/stream');
   } finally {
     await app.close();
   }
@@ -1326,6 +1349,7 @@ test('mcp stream endpoint supports initialize -> tools/list -> tools/call lifecy
     assert.equal(initializePayload.jsonrpc, '2.0');
     assert.equal(initializePayload.id, 'init-1');
     assert.equal(initializePayload.result.protocolVersion, '2025-06-18');
+    assert.equal(initializeRes.headers['mcp-protocol-version'], '2025-06-18');
     const sessionId = String(initializeRes.headers['mcp-session-id'] || '').trim();
     assert.ok(sessionId.length > 0);
 
@@ -1350,6 +1374,7 @@ test('mcp stream endpoint supports initialize -> tools/list -> tools/call lifecy
     assert.ok(Array.isArray(listPayload.result.tools));
     assert.ok(listPayload.result.tools.some((item) => item.name === 'flockmesh_invoke_mcp_tool'));
     assert.equal(listRes.headers['mcp-session-id'], sessionId);
+    assert.equal(listRes.headers['mcp-protocol-version'], '2025-06-18');
 
     const callRes = await app.inject({
       method: 'POST',
@@ -1379,6 +1404,29 @@ test('mcp stream endpoint supports initialize -> tools/list -> tools/call lifecy
     assert.equal(Array.isArray(callPayload.result.content), true);
     const toolResult = JSON.parse(callPayload.result.content[0]?.text || '{}');
     assert.ok(Array.isArray(toolResult.items));
+    assert.equal(callRes.headers['mcp-protocol-version'], '2025-06-18');
+  } finally {
+    await app.close();
+  }
+});
+
+test('mcp stream GET endpoint returns event stream headers and protocol metadata', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v0/mcp/stream',
+      headers: {
+        'mcp-protocol-version': '2025-11-25'
+      }
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.match(String(res.headers['content-type'] || ''), /^text\/event-stream/i);
+    assert.equal(res.headers['mcp-protocol-version'], '2025-11-25');
+    assert.match(res.payload, /flockmesh mcp stream ready/);
   } finally {
     await app.close();
   }
@@ -1430,6 +1478,12 @@ test('mcp stream endpoint enforces bearer auth when configured', async () => {
     });
     assert.equal(unauthorizedRes.statusCode, 401);
 
+    const unauthorizedGetRes = await app.inject({
+      method: 'GET',
+      url: '/v0/mcp/stream'
+    });
+    assert.equal(unauthorizedGetRes.statusCode, 401);
+
     const wrongTokenRes = await app.inject({
       method: 'POST',
       url: '/v0/mcp/stream',
@@ -1468,11 +1522,99 @@ test('mcp stream endpoint enforces bearer auth when configured', async () => {
     assert.equal(profileRes.statusCode, 200);
     const profile = profileRes.json();
     assert.equal(profile.mcp_bridge.streamable_http.endpoint, '/v0/mcp/stream');
+    assert.ok(String(profile.mcp_bridge.streamable_http.url || '').endsWith('/v0/mcp/stream'));
     assert.equal(profile.mcp_bridge.streamable_http.auth.type, 'bearer');
     assert.equal(
       profile.mcp_bridge.streamable_http.auth.env_var,
       'FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN'
     );
+  } finally {
+    await app.close();
+  }
+});
+
+test('runs endpoint supports workspace scoped filtering', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const primaryAgentRes = await app.inject({
+      method: 'POST',
+      url: '/v0/agents',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        role: 'ops_assistant',
+        owners: ['usr_yingapple'],
+        name: 'Primary Agent'
+      }
+    });
+    assert.equal(primaryAgentRes.statusCode, 201);
+    const primaryAgent = primaryAgentRes.json();
+
+    const secondaryAgentRes = await app.inject({
+      method: 'POST',
+      url: '/v0/agents',
+      payload: {
+        workspace_id: 'wsp_other_company',
+        role: 'ops_assistant',
+        owners: ['usr_yingapple'],
+        name: 'Secondary Agent'
+      }
+    });
+    assert.equal(secondaryAgentRes.statusCode, 201);
+    const secondaryAgent = secondaryAgentRes.json();
+
+    for (const [workspaceId, agentId] of [
+      ['wsp_mindverse_cn', primaryAgent.id],
+      ['wsp_other_company', secondaryAgent.id]
+    ]) {
+      const bindingRes = await app.inject({
+        method: 'POST',
+        url: '/v0/connectors/bindings',
+        payload: {
+          workspace_id: workspaceId,
+          agent_id: agentId,
+          connector_id: 'con_feishu_official',
+          scopes: ['message.send'],
+          auth_ref: `sec_${workspaceId}_token`,
+          risk_profile: 'restricted'
+        }
+      });
+      assert.equal(bindingRes.statusCode, 201);
+    }
+
+    for (const [workspaceId, agentId] of [
+      ['wsp_mindverse_cn', primaryAgent.id],
+      ['wsp_other_company', secondaryAgent.id]
+    ]) {
+      const runRes = await app.inject({
+        method: 'POST',
+        url: '/v0/runs',
+        payload: {
+          workspace_id: workspaceId,
+          agent_id: agentId,
+          playbook_id: 'pbk_weekly_ops_sync',
+          trigger: {
+            type: 'manual',
+            source: 'feishu.group:ops-war-room',
+            actor_id: 'usr_yingapple',
+            at: new Date().toISOString()
+          }
+        }
+      });
+      assert.equal(runRes.statusCode, 202);
+      assert.equal(runRes.json().status, 'waiting_approval');
+    }
+
+    const filteredRes = await app.inject({
+      method: 'GET',
+      url: '/v0/runs?status=waiting_approval&workspace_id=wsp_mindverse_cn&limit=10'
+    });
+    assert.equal(filteredRes.statusCode, 200);
+    const filtered = filteredRes.json();
+    assert.ok(filtered.total >= 1);
+    assert.ok(filtered.items.every((item) => item.workspace_id === 'wsp_mindverse_cn'));
+    assert.ok(filtered.items.some((item) => item.agent_id === primaryAgent.id));
   } finally {
     await app.close();
   }

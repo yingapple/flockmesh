@@ -144,6 +144,26 @@ export class StateDB {
         LIMIT ? OFFSET ?
       `),
       countRunsByStatus: this.db.prepare('SELECT COUNT(*) AS total FROM runs WHERE status = ?'),
+      listRunsByWorkspace: this.db.prepare(`
+        SELECT payload
+        FROM runs
+        WHERE workspace_id = ?
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countRunsByWorkspace: this.db.prepare('SELECT COUNT(*) AS total FROM runs WHERE workspace_id = ?'),
+      listRunsByWorkspaceAndStatus: this.db.prepare(`
+        SELECT payload
+        FROM runs
+        WHERE workspace_id = ? AND status = ?
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countRunsByWorkspaceAndStatus: this.db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM runs
+        WHERE workspace_id = ? AND status = ?
+      `),
 
       getIdempotency: this.db.prepare(
         'SELECT payload FROM idempotency_results WHERE idempotency_key = ?'
@@ -285,9 +305,43 @@ export class StateDB {
     return parseJson(row?.payload);
   }
 
-  listRuns({ status, limit = 100, offset = 0 } = {}) {
+  listRuns({ status, workspaceId, limit = 100, offset = 0 } = {}) {
     const boundedLimit = Math.min(Math.max(toInt(limit, 100), 1), 500);
     const boundedOffset = Math.max(toInt(offset, 0), 0);
+    const normalizedWorkspaceId = String(workspaceId || '').trim();
+
+    if (normalizedWorkspaceId && status) {
+      const rows = this.stmts.listRunsByWorkspaceAndStatus.all(
+        normalizedWorkspaceId,
+        status,
+        boundedLimit,
+        boundedOffset
+      );
+      const total = this.stmts.countRunsByWorkspaceAndStatus
+        .get(normalizedWorkspaceId, status)
+        .total;
+      return {
+        total,
+        limit: boundedLimit,
+        offset: boundedOffset,
+        items: rows.map((row) => parseJson(row.payload))
+      };
+    }
+
+    if (normalizedWorkspaceId) {
+      const rows = this.stmts.listRunsByWorkspace.all(
+        normalizedWorkspaceId,
+        boundedLimit,
+        boundedOffset
+      );
+      const total = this.stmts.countRunsByWorkspace.get(normalizedWorkspaceId).total;
+      return {
+        total,
+        limit: boundedLimit,
+        offset: boundedOffset,
+        items: rows.map((row) => parseJson(row.payload))
+      };
+    }
 
     if (status) {
       const rows = this.stmts.listRunsByStatus.all(status, boundedLimit, boundedOffset);

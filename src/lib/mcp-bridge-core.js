@@ -246,6 +246,7 @@ export function createMcpBridgeCore({
           method: 'GET',
           url: buildQuery('/v0/runs', {
             status: 'waiting_approval',
+            workspace_id: workspaceId,
             limit,
             offset
           })
@@ -253,7 +254,6 @@ export function createMcpBridgeCore({
 
         const runs = Array.isArray(page.items) ? page.items : [];
         const items = runs
-          .filter((run) => run.workspace_id === workspaceId)
           .map((run) => ({
             run_id: run.id,
             workspace_id: run.workspace_id,

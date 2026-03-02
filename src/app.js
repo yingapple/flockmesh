@@ -90,10 +90,13 @@ const POLICY_DECISION_WEIGHT = {
   escalate: 2,
   deny: 3
 };
-const MCP_BRIDGE_STDIO_COMMAND = 'node';
-const MCP_BRIDGE_STDIO_ARGS = ['src/mcp-bridge-stdio.js'];
+const MCP_BRIDGE_STDIO_COMMAND = process.execPath || 'node';
 const MCP_BRIDGE_CORE_TOOL_NAMES = MCP_BRIDGE_TOOL_DEFINITIONS.map((item) => item.name);
-const MCP_BRIDGE_PROTOCOL_VERSION = '2025-06-18';
+const MCP_BRIDGE_PROTOCOL_VERSION = '2025-11-25';
+const MCP_PROTOCOL_HEADER = 'mcp-protocol-version';
+const MCP_SESSION_HEADER = 'mcp-session-id';
+const MCP_BRIDGE_SESSION_TTL_MS = 30 * 60 * 1000;
+const MCP_BRIDGE_MAX_SESSIONS = 500;
 
 function sha256(payload) {
   return `sha256:${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
@@ -996,12 +999,16 @@ function buildAgentIdeBridgeProfile({
   actorId = '',
   rootDir = '',
   allowlists = [],
-  mcpBridgeBearerTokenEnabled = false
+  mcpBridgeBearerTokenEnabled = false,
+  streamableHttpUrl = '',
+  protocolVersion = MCP_BRIDGE_PROTOCOL_VERSION
 } = {}) {
   const normalizedWorkspaceId = String(workspaceId || '').trim();
   const normalizedAgentId = String(agentId || '').trim();
   const normalizedActorId = String(actorId || '').trim() || 'usr_yingapple';
   const normalizedRootDir = path.resolve(String(rootDir || defaultProjectRoot));
+  const bridgeScriptPath = path.resolve(normalizedRootDir, 'src', 'mcp-bridge-stdio.js');
+  const normalizedStreamableHttpUrl = String(streamableHttpUrl || '').trim();
 
   return {
     version: 'v0',
@@ -1012,9 +1019,12 @@ function buildAgentIdeBridgeProfile({
     mcp_bridge: {
       transport: 'stdio',
       command: MCP_BRIDGE_STDIO_COMMAND,
-      args: MCP_BRIDGE_STDIO_ARGS,
+      args: [bridgeScriptPath],
+      cwd: normalizedRootDir,
       streamable_http: {
         endpoint: '/v0/mcp/stream',
+        url: normalizedStreamableHttpUrl || '/v0/mcp/stream',
+        protocol_version: protocolVersion,
         ...(mcpBridgeBearerTokenEnabled
           ? {
               auth: {
@@ -1079,6 +1089,81 @@ function parseBearerTokenFromAuthorizationHeader(headerValue = '') {
   if (!value) return '';
   const match = /^Bearer\s+(.+)$/i.exec(value);
   return match ? String(match[1] || '').trim() : '';
+}
+
+function resolveMcpProtocolVersionFromRequest(request) {
+  const headerValue = String(request.headers[MCP_PROTOCOL_HEADER] || '').trim();
+  return headerValue || MCP_BRIDGE_PROTOCOL_VERSION;
+}
+
+function nowMs() {
+  return Date.now();
+}
+
+function sessionUpdatedAtMs(session = {}) {
+  const direct = Number(session.updated_at_ms);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const parsed = Date.parse(String(session.updated_at || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function pruneMcpBridgeSessions(app, currentMs = nowMs()) {
+  const sessions = app.mcpBridgeSessions;
+  if (!sessions || sessions.size === 0) return;
+
+  for (const [sessionId, session] of sessions.entries()) {
+    const updatedMs = sessionUpdatedAtMs(session);
+    if (!updatedMs || (currentMs - updatedMs) > MCP_BRIDGE_SESSION_TTL_MS) {
+      sessions.delete(sessionId);
+    }
+  }
+
+  if (sessions.size <= MCP_BRIDGE_MAX_SESSIONS) return;
+
+  const sorted = Array.from(sessions.entries())
+    .map(([sessionId, session]) => ({
+      sessionId,
+      updatedAtMs: sessionUpdatedAtMs(session)
+    }))
+    .sort((a, b) => a.updatedAtMs - b.updatedAtMs);
+
+  const deleteCount = sessions.size - MCP_BRIDGE_MAX_SESSIONS;
+  for (let index = 0; index < deleteCount; index += 1) {
+    sessions.delete(sorted[index].sessionId);
+  }
+}
+
+function normalizeBaseUrl(baseUrl = '') {
+  const value = String(baseUrl || '').trim();
+  if (!value) return '';
+  return value.replace(/\/+$/, '');
+}
+
+function resolvePublicBaseUrl({ request, app }) {
+  const configured = normalizeBaseUrl(app.mcpBridgePublicBaseUrl);
+  if (configured) return configured;
+
+  const forwardedProtoRaw = String(request.headers['x-forwarded-proto'] || '').trim();
+  const forwardedHostRaw = String(request.headers['x-forwarded-host'] || '').trim();
+  const forwardedProto = forwardedProtoRaw.split(',')[0]?.trim();
+  const forwardedHost = forwardedHostRaw.split(',')[0]?.trim();
+  const protocol = forwardedProto || String(request.protocol || 'http');
+  const host = forwardedHost || String(request.headers.host || `127.0.0.1:${process.env.PORT || 8080}`);
+  return normalizeBaseUrl(`${protocol}://${host}`);
+}
+
+function setMcpProtocolHeader(reply, protocolVersion = MCP_BRIDGE_PROTOCOL_VERSION) {
+  reply.header(MCP_PROTOCOL_HEADER, protocolVersion);
+}
+
+function authorizeMcpBridgeRequest(app, request, reply) {
+  const expectedBearerToken = app.mcpBridgeBearerToken;
+  if (!expectedBearerToken) return true;
+  const providedToken = parseBearerTokenFromAuthorizationHeader(request.headers.authorization);
+  if (providedToken && providedToken === expectedBearerToken) return true;
+  reply.code(401);
+  reply.send({ message: 'Unauthorized MCP bridge request' });
+  return false;
 }
 
 function buildPolicyTraceSummary(decisions = []) {
@@ -1465,7 +1550,8 @@ export function buildApp({
   incidentExportSigningKeyId,
   policyAdminConfig,
   trustedDefaultActorId = process.env.FLOCKMESH_TRUSTED_DEFAULT_ACTOR_ID || '',
-  mcpBridgeBearerToken = process.env.FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN || ''
+  mcpBridgeBearerToken = process.env.FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN || '',
+  mcpBridgePublicBaseUrl = process.env.FLOCKMESH_PUBLIC_BASE_URL || ''
 } = {}) {
   const app = Fastify({ logger });
   const store = createStore();
@@ -1500,6 +1586,7 @@ export function buildApp({
   app.decorate('policyAdminConfig', mergePolicyAdminConfigs([policyAdminConfig]));
   app.decorate('trustedDefaultActorId', String(trustedDefaultActorId || '').trim());
   app.decorate('mcpBridgeBearerToken', String(mcpBridgeBearerToken || '').trim());
+  app.decorate('mcpBridgePublicBaseUrl', normalizeBaseUrl(mcpBridgePublicBaseUrl));
   app.decorate('mcpBridgeSessions', new Map());
   app.decorate('mcpBridgeCore', createMcpBridgeCore({
     app,
@@ -2575,6 +2662,7 @@ export function buildApp({
     const workspaceId = request.query?.workspace_id || '';
     const agentId = request.query?.agent_id || '';
     const actorId = request.query?.actor_id || '';
+    const publicBaseUrl = resolvePublicBaseUrl({ request, app });
 
     const allowlists = app.mcpAllowlists
       .map((doc) => ({
@@ -2594,8 +2682,32 @@ export function buildApp({
       actorId,
       rootDir,
       allowlists,
-      mcpBridgeBearerTokenEnabled: Boolean(app.mcpBridgeBearerToken)
+      mcpBridgeBearerTokenEnabled: Boolean(app.mcpBridgeBearerToken),
+      streamableHttpUrl: `${publicBaseUrl}/v0/mcp/stream`,
+      protocolVersion: MCP_BRIDGE_PROTOCOL_VERSION
     });
+  });
+
+  app.get('/v0/mcp/stream', async (request, reply) => {
+    if (!authorizeMcpBridgeRequest(app, request, reply)) return;
+
+    pruneMcpBridgeSessions(app);
+
+    const incomingSessionId = String(request.headers[MCP_SESSION_HEADER] || '').trim();
+    const session = incomingSessionId ? app.mcpBridgeSessions.get(incomingSessionId) : null;
+    const protocolVersion = session?.protocolVersion || resolveMcpProtocolVersionFromRequest(request);
+    setMcpProtocolHeader(reply, protocolVersion);
+
+    if (incomingSessionId && session?.initialized) {
+      reply.header(MCP_SESSION_HEADER, incomingSessionId);
+    }
+
+    reply
+      .header('cache-control', 'no-cache, no-transform')
+      .header('connection', 'keep-alive')
+      .type('text/event-stream; charset=utf-8');
+
+    return ': flockmesh mcp stream ready\n\n';
   });
 
   app.post('/v0/mcp/stream', {
@@ -2606,14 +2718,9 @@ export function buildApp({
       }
     }
   }, async (request, reply) => {
-    const expectedBearerToken = app.mcpBridgeBearerToken;
-    if (expectedBearerToken) {
-      const providedToken = parseBearerTokenFromAuthorizationHeader(request.headers.authorization);
-      if (!providedToken || providedToken !== expectedBearerToken) {
-        reply.code(401);
-        return { message: 'Unauthorized MCP bridge request' };
-      }
-    }
+    if (!authorizeMcpBridgeRequest(app, request, reply)) return;
+
+    pruneMcpBridgeSessions(app);
 
     const body = request.body;
     const hasId = Object.prototype.hasOwnProperty.call(body || {}, 'id');
@@ -2621,6 +2728,10 @@ export function buildApp({
     const isNotification = !hasId || id === null;
     const method = String(body?.method || '').trim();
     const jsonrpcVersion = String(body?.jsonrpc || '').trim();
+    const incomingSessionId = String(request.headers[MCP_SESSION_HEADER] || '').trim();
+    const session = incomingSessionId ? app.mcpBridgeSessions.get(incomingSessionId) : null;
+    const headerProtocolVersion = session?.protocolVersion || resolveMcpProtocolVersionFromRequest(request);
+    setMcpProtocolHeader(reply, headerProtocolVersion);
 
     if (jsonrpcVersion !== '2.0' || !method) {
       if (isNotification) {
@@ -2630,19 +2741,19 @@ export function buildApp({
       return mcpJsonRpcError(id, -32600, 'Invalid Request');
     }
 
-    const incomingSessionId = String(request.headers['mcp-session-id'] || '').trim();
-    const session = incomingSessionId ? app.mcpBridgeSessions.get(incomingSessionId) : null;
-
     if (method === 'initialize') {
-      const requestedProtocolVersion = String(body?.params?.protocolVersion || '').trim();
+      const requestedProtocolVersion = String(body?.params?.protocolVersion || '').trim()
+        || resolveMcpProtocolVersionFromRequest(request);
       const protocolVersion = requestedProtocolVersion || MCP_BRIDGE_PROTOCOL_VERSION;
       const sessionId = incomingSessionId || makeId('mcp_session');
       app.mcpBridgeSessions.set(sessionId, {
         initialized: true,
         protocolVersion,
-        updated_at: nowIso()
+        updated_at: nowIso(),
+        updated_at_ms: nowMs()
       });
-      reply.header('mcp-session-id', sessionId);
+      reply.header(MCP_SESSION_HEADER, sessionId);
+      setMcpProtocolHeader(reply, protocolVersion);
 
       if (isNotification) {
         reply.code(202);
@@ -2681,8 +2792,10 @@ export function buildApp({
     }
 
     if (incomingSessionId) {
-      reply.header('mcp-session-id', incomingSessionId);
+      reply.header(MCP_SESSION_HEADER, incomingSessionId);
+      setMcpProtocolHeader(reply, session.protocolVersion || headerProtocolVersion);
       session.updated_at = nowIso();
+      session.updated_at_ms = nowMs();
       app.mcpBridgeSessions.set(incomingSessionId, session);
     }
 
@@ -5045,6 +5158,7 @@ export function buildApp({
             type: 'string',
             enum: ['accepted', 'running', 'waiting_approval', 'completed', 'failed', 'cancelled']
           },
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
           limit: { type: 'integer', minimum: 1, maximum: 500 },
           offset: { type: 'integer', minimum: 0 }
         }
@@ -5067,8 +5181,13 @@ export function buildApp({
       }
     }
   }, async (request) => {
-    const { status, limit, offset } = request.query;
-    return app.stateDb.listRuns({ status, limit, offset });
+    const { status, workspace_id: workspaceId, limit, offset } = request.query;
+    return app.stateDb.listRuns({
+      status,
+      workspaceId,
+      limit,
+      offset
+    });
   });
 
   app.get('/v0/runs/:run_id', {
