@@ -55,7 +55,7 @@ import {
   listAgentKits,
   makeBlueprintAuthRef
 } from './lib/agent-kits.js';
-import { MCP_BRIDGE_TOOL_DEFINITIONS } from './lib/mcp-bridge-core.js';
+import { MCP_BRIDGE_TOOL_DEFINITIONS, createMcpBridgeCore } from './lib/mcp-bridge-core.js';
 import {
   buildDefaultActionIntents,
   buildExecutionResult,
@@ -93,6 +93,7 @@ const POLICY_DECISION_WEIGHT = {
 const MCP_BRIDGE_STDIO_COMMAND = 'node';
 const MCP_BRIDGE_STDIO_ARGS = ['src/mcp-bridge-stdio.js'];
 const MCP_BRIDGE_CORE_TOOL_NAMES = MCP_BRIDGE_TOOL_DEFINITIONS.map((item) => item.name);
+const MCP_BRIDGE_PROTOCOL_VERSION = '2025-06-18';
 
 function sha256(payload) {
   return `sha256:${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
@@ -994,7 +995,8 @@ function buildAgentIdeBridgeProfile({
   agentId = '',
   actorId = '',
   rootDir = '',
-  allowlists = []
+  allowlists = [],
+  mcpBridgeBearerTokenEnabled = false
 } = {}) {
   const normalizedWorkspaceId = String(workspaceId || '').trim();
   const normalizedAgentId = String(agentId || '').trim();
@@ -1011,6 +1013,17 @@ function buildAgentIdeBridgeProfile({
       transport: 'stdio',
       command: MCP_BRIDGE_STDIO_COMMAND,
       args: MCP_BRIDGE_STDIO_ARGS,
+      streamable_http: {
+        endpoint: '/v0/mcp/stream',
+        ...(mcpBridgeBearerTokenEnabled
+          ? {
+              auth: {
+                type: 'bearer',
+                env_var: 'FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN'
+              }
+            }
+          : {})
+      },
       env: {
         FLOCKMESH_ROOT_DIR: normalizedRootDir,
         FLOCKMESH_WORKSPACE_ID: normalizedWorkspaceId,
@@ -1027,6 +1040,45 @@ function buildAgentIdeBridgeProfile({
       'immutable audit for every approval and invoke'
     ]
   };
+}
+
+function mcpToolCallResult(payload, { isError = false } = {}) {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(payload, null, 2)
+      }
+    ],
+    isError
+  };
+}
+
+function mcpJsonRpcResult(id, result) {
+  return {
+    jsonrpc: '2.0',
+    id,
+    result
+  };
+}
+
+function mcpJsonRpcError(id, code, message, data = undefined) {
+  return {
+    jsonrpc: '2.0',
+    id,
+    error: {
+      code,
+      message,
+      ...(data !== undefined ? { data } : {})
+    }
+  };
+}
+
+function parseBearerTokenFromAuthorizationHeader(headerValue = '') {
+  const value = String(headerValue || '').trim();
+  if (!value) return '';
+  const match = /^Bearer\s+(.+)$/i.exec(value);
+  return match ? String(match[1] || '').trim() : '';
 }
 
 function buildPolicyTraceSummary(decisions = []) {
@@ -1412,7 +1464,8 @@ export function buildApp({
   incidentExportSigningKeys,
   incidentExportSigningKeyId,
   policyAdminConfig,
-  trustedDefaultActorId = process.env.FLOCKMESH_TRUSTED_DEFAULT_ACTOR_ID || ''
+  trustedDefaultActorId = process.env.FLOCKMESH_TRUSTED_DEFAULT_ACTOR_ID || '',
+  mcpBridgeBearerToken = process.env.FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN || ''
 } = {}) {
   const app = Fastify({ logger });
   const store = createStore();
@@ -1446,6 +1499,15 @@ export function buildApp({
   app.decorate('agentKitLibrary', {});
   app.decorate('policyAdminConfig', mergePolicyAdminConfigs([policyAdminConfig]));
   app.decorate('trustedDefaultActorId', String(trustedDefaultActorId || '').trim());
+  app.decorate('mcpBridgeBearerToken', String(mcpBridgeBearerToken || '').trim());
+  app.decorate('mcpBridgeSessions', new Map());
+  app.decorate('mcpBridgeCore', createMcpBridgeCore({
+    app,
+    defaults: {
+      workspaceId: process.env.FLOCKMESH_WORKSPACE_ID || 'wsp_mindverse_cn',
+      actorId: String(trustedDefaultActorId || '').trim() || 'usr_yingapple'
+    }
+  }));
 
   for (const schema of loadContractSchemas(rootDir)) {
     app.addSchema(schema);
@@ -2531,8 +2593,142 @@ export function buildApp({
       agentId,
       actorId,
       rootDir,
-      allowlists
+      allowlists,
+      mcpBridgeBearerTokenEnabled: Boolean(app.mcpBridgeBearerToken)
     });
+  });
+
+  app.post('/v0/mcp/stream', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: true
+      }
+    }
+  }, async (request, reply) => {
+    const expectedBearerToken = app.mcpBridgeBearerToken;
+    if (expectedBearerToken) {
+      const providedToken = parseBearerTokenFromAuthorizationHeader(request.headers.authorization);
+      if (!providedToken || providedToken !== expectedBearerToken) {
+        reply.code(401);
+        return { message: 'Unauthorized MCP bridge request' };
+      }
+    }
+
+    const body = request.body;
+    const hasId = Object.prototype.hasOwnProperty.call(body || {}, 'id');
+    const id = hasId ? body.id : null;
+    const isNotification = !hasId || id === null;
+    const method = String(body?.method || '').trim();
+    const jsonrpcVersion = String(body?.jsonrpc || '').trim();
+
+    if (jsonrpcVersion !== '2.0' || !method) {
+      if (isNotification) {
+        reply.code(202);
+        return '';
+      }
+      return mcpJsonRpcError(id, -32600, 'Invalid Request');
+    }
+
+    const incomingSessionId = String(request.headers['mcp-session-id'] || '').trim();
+    const session = incomingSessionId ? app.mcpBridgeSessions.get(incomingSessionId) : null;
+
+    if (method === 'initialize') {
+      const requestedProtocolVersion = String(body?.params?.protocolVersion || '').trim();
+      const protocolVersion = requestedProtocolVersion || MCP_BRIDGE_PROTOCOL_VERSION;
+      const sessionId = incomingSessionId || makeId('mcp_session');
+      app.mcpBridgeSessions.set(sessionId, {
+        initialized: true,
+        protocolVersion,
+        updated_at: nowIso()
+      });
+      reply.header('mcp-session-id', sessionId);
+
+      if (isNotification) {
+        reply.code(202);
+        return '';
+      }
+
+      return mcpJsonRpcResult(id, {
+        protocolVersion,
+        capabilities: {
+          tools: {
+            listChanged: false
+          }
+        },
+        serverInfo: {
+          name: 'flockmesh-mcp-bridge-http',
+          version: '0.1.0'
+        },
+        instructions: [
+          'Streamable HTTP bridge for Codex/Claude enterprise workflows.',
+          'Use core tools only; mutating operations stay policy-gated and audited.'
+        ].join(' ')
+      });
+    }
+
+    if (method === 'notifications/initialized') {
+      reply.code(202);
+      return '';
+    }
+
+    if (!session?.initialized) {
+      if (isNotification) {
+        reply.code(202);
+        return '';
+      }
+      return mcpJsonRpcError(id, -32002, 'Server not initialized');
+    }
+
+    if (incomingSessionId) {
+      reply.header('mcp-session-id', incomingSessionId);
+      session.updated_at = nowIso();
+      app.mcpBridgeSessions.set(incomingSessionId, session);
+    }
+
+    if (method === 'ping') {
+      if (isNotification) {
+        reply.code(202);
+        return '';
+      }
+      return mcpJsonRpcResult(id, {});
+    }
+
+    if (method === 'tools/list') {
+      if (isNotification) {
+        reply.code(202);
+        return '';
+      }
+      return mcpJsonRpcResult(id, {
+        tools: app.mcpBridgeCore.listTools()
+      });
+    }
+
+    if (method === 'tools/call') {
+      if (isNotification) {
+        reply.code(202);
+        return '';
+      }
+
+      const name = String(body?.params?.name || '').trim();
+      const args = body?.params?.arguments;
+      try {
+        const payload = await app.mcpBridgeCore.callTool(name, args);
+        return mcpJsonRpcResult(id, mcpToolCallResult(payload));
+      } catch (err) {
+        return mcpJsonRpcResult(id, mcpToolCallResult({
+          message: String(err?.message || err),
+          ...(err?.statusCode ? { status_code: err.statusCode } : {}),
+          ...(err?.payload ? { payload: err.payload } : {})
+        }, { isError: true }));
+      }
+    }
+
+    if (isNotification) {
+      reply.code(202);
+      return '';
+    }
+    return mcpJsonRpcError(id, -32601, `Method not found: ${method}`);
   });
 
   app.get('/v0/connectors/rate-limits', {

@@ -657,6 +657,60 @@ paths:
                     items:
                       type: string
 
+  /v0/mcp/stream:
+    post:
+      operationId: postMcpStreamBridge
+      summary: Streamable HTTP MCP bridge endpoint for Codex/Claude Code clients
+      description: |
+        JSON-RPC MCP endpoint supporting initialize, notifications/initialized, ping,
+        tools/list, and tools/call with session header reuse (`mcp-session-id`).
+      parameters:
+        - in: header
+          name: mcp-session-id
+          required: false
+          schema:
+            type: string
+          description: MCP bridge session id returned from initialize.
+        - in: header
+          name: authorization
+          required: false
+          schema:
+            type: string
+          description: Optional `Bearer` token header when bridge auth is enabled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: JSON-RPC response payload for request methods
+          headers:
+            mcp-session-id:
+              description: Session identifier for subsequent MCP bridge requests.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "202":
+          description: Notification accepted; no response body returned.
+        "401":
+          description: Unauthorized MCP bridge request.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [message]
+                properties:
+                  message:
+                    type: string
+
   /v0/connectors/rate-limits:
     get:
       operationId: getConnectorRateLimits

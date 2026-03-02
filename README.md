@@ -262,6 +262,7 @@ Control Plane currently includes:
 - Agent blueprint apply API: `POST /v0/agent-blueprints/apply`
 - One-person quickstart API: `POST /v0/quickstart/one-person`
 - Agent IDE bridge profile API: `GET /v0/integrations/agent-ide-profile`
+- Agent IDE streamable HTTP bridge API: `POST /v0/mcp/stream`
 - Policy patch console (profile catalog + remediation draft + dry-run/apply + hash guard)
 - Policy rollback console (history preview + draft latest + dry-run/apply + hash guard)
 - Policy profile version API: `GET /v0/policy/profiles/{profile_name}/version`
@@ -370,7 +371,14 @@ FLOCKMESH_ROOT_DIR="$(pwd)" \
 FLOCKMESH_WORKSPACE_ID="wsp_mindverse_cn" \
 FLOCKMESH_ACTOR_ID="usr_yingapple" \
 npm run mcp:bridge
+
+# 3) Or call MCP bridge over streamable HTTP (session header + JSON-RPC)
+curl -i -s http://127.0.0.1:8080/v0/mcp/stream \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"codex","version":"1.0.0"}}}'
 ```
+
+Optional: set `FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN` to require `Authorization: Bearer <token>` on `/v0/mcp/stream`.
 
 Bridge toolset is intentionally small and enterprise-first:
 

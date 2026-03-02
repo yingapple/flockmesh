@@ -1283,6 +1283,8 @@ test('agent ide profile endpoint returns stdio bridge config and filtered allowl
     assert.equal(payload.mcp_bridge.transport, 'stdio');
     assert.equal(payload.mcp_bridge.command, 'node');
     assert.deepEqual(payload.mcp_bridge.args, ['src/mcp-bridge-stdio.js']);
+    assert.equal(payload.mcp_bridge.streamable_http.endpoint, '/v0/mcp/stream');
+    assert.equal(Object.hasOwn(payload.mcp_bridge.streamable_http, 'auth'), false);
     assert.equal(payload.mcp_bridge.env.FLOCKMESH_WORKSPACE_ID, 'wsp_mindverse_cn');
     assert.equal(payload.mcp_bridge.env.FLOCKMESH_AGENT_ID, 'agt_mindverse_ops');
     assert.equal(payload.mcp_bridge.env.FLOCKMESH_ACTOR_ID, 'usr_yingapple');
@@ -1293,6 +1295,183 @@ test('agent ide profile endpoint returns stdio bridge config and filtered allowl
       payload.mcp_allowlists.some((doc) =>
         doc.rules.some((rule) => rule.workspace_id === 'wsp_mindverse_cn')
       )
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('mcp stream endpoint supports initialize -> tools/list -> tools/call lifecycle', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const initializeRes = await app.inject({
+      method: 'POST',
+      url: '/v0/mcp/stream',
+      payload: {
+        jsonrpc: '2.0',
+        id: 'init-1',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'api-test', version: '1.0.0' }
+        }
+      }
+    });
+
+    assert.equal(initializeRes.statusCode, 200);
+    const initializePayload = initializeRes.json();
+    assert.equal(initializePayload.jsonrpc, '2.0');
+    assert.equal(initializePayload.id, 'init-1');
+    assert.equal(initializePayload.result.protocolVersion, '2025-06-18');
+    const sessionId = String(initializeRes.headers['mcp-session-id'] || '').trim();
+    assert.ok(sessionId.length > 0);
+
+    const listRes = await app.inject({
+      method: 'POST',
+      url: '/v0/mcp/stream',
+      headers: {
+        'mcp-session-id': sessionId
+      },
+      payload: {
+        jsonrpc: '2.0',
+        id: 'list-1',
+        method: 'tools/list',
+        params: {}
+      }
+    });
+
+    assert.equal(listRes.statusCode, 200);
+    const listPayload = listRes.json();
+    assert.equal(listPayload.jsonrpc, '2.0');
+    assert.equal(listPayload.id, 'list-1');
+    assert.ok(Array.isArray(listPayload.result.tools));
+    assert.ok(listPayload.result.tools.some((item) => item.name === 'flockmesh_invoke_mcp_tool'));
+    assert.equal(listRes.headers['mcp-session-id'], sessionId);
+
+    const callRes = await app.inject({
+      method: 'POST',
+      url: '/v0/mcp/stream',
+      headers: {
+        'mcp-session-id': sessionId
+      },
+      payload: {
+        jsonrpc: '2.0',
+        id: 'call-1',
+        method: 'tools/call',
+        params: {
+          name: 'flockmesh_list_pending_approvals',
+          arguments: {
+            workspace_id: 'wsp_mindverse_cn',
+            limit: 10
+          }
+        }
+      }
+    });
+
+    assert.equal(callRes.statusCode, 200);
+    const callPayload = callRes.json();
+    assert.equal(callPayload.jsonrpc, '2.0');
+    assert.equal(callPayload.id, 'call-1');
+    assert.equal(callPayload.result.isError, false);
+    assert.equal(Array.isArray(callPayload.result.content), true);
+    const toolResult = JSON.parse(callPayload.result.content[0]?.text || '{}');
+    assert.ok(Array.isArray(toolResult.items));
+  } finally {
+    await app.close();
+  }
+});
+
+test('mcp stream endpoint rejects tools request before initialize', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v0/mcp/stream',
+      payload: {
+        jsonrpc: '2.0',
+        id: 'list-before-init',
+        method: 'tools/list',
+        params: {}
+      }
+    });
+
+    assert.equal(res.statusCode, 200);
+    const payload = res.json();
+    assert.equal(payload.jsonrpc, '2.0');
+    assert.equal(payload.id, 'list-before-init');
+    assert.equal(payload.error.code, -32002);
+    assert.equal(payload.error.message, 'Server not initialized');
+  } finally {
+    await app.close();
+  }
+});
+
+test('mcp stream endpoint enforces bearer auth when configured', async () => {
+  const app = createTestApp({
+    mcpBridgeBearerToken: 'bridge_token_test_only'
+  });
+  await app.ready();
+
+  try {
+    const unauthorizedRes = await app.inject({
+      method: 'POST',
+      url: '/v0/mcp/stream',
+      payload: {
+        jsonrpc: '2.0',
+        id: 'init-unauthorized',
+        method: 'initialize',
+        params: {}
+      }
+    });
+    assert.equal(unauthorizedRes.statusCode, 401);
+
+    const wrongTokenRes = await app.inject({
+      method: 'POST',
+      url: '/v0/mcp/stream',
+      headers: {
+        authorization: 'Bearer wrong_token'
+      },
+      payload: {
+        jsonrpc: '2.0',
+        id: 'init-wrong-token',
+        method: 'initialize',
+        params: {}
+      }
+    });
+    assert.equal(wrongTokenRes.statusCode, 401);
+
+    const authorizedRes = await app.inject({
+      method: 'POST',
+      url: '/v0/mcp/stream',
+      headers: {
+        authorization: 'Bearer bridge_token_test_only'
+      },
+      payload: {
+        jsonrpc: '2.0',
+        id: 'init-authorized',
+        method: 'initialize',
+        params: {}
+      }
+    });
+    assert.equal(authorizedRes.statusCode, 200);
+    assert.ok(String(authorizedRes.headers['mcp-session-id'] || '').length > 0);
+
+    const profileRes = await app.inject({
+      method: 'GET',
+      url: '/v0/integrations/agent-ide-profile?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple'
+    });
+    assert.equal(profileRes.statusCode, 200);
+    const profile = profileRes.json();
+    assert.equal(profile.mcp_bridge.streamable_http.endpoint, '/v0/mcp/stream');
+    assert.equal(profile.mcp_bridge.streamable_http.auth.type, 'bearer');
+    assert.equal(
+      profile.mcp_bridge.streamable_http.auth.env_var,
+      'FLOCKMESH_MCP_BRIDGE_BEARER_TOKEN'
     );
   } finally {
     await app.close();
