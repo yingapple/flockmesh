@@ -15,6 +15,15 @@ const state = {
   policyPatchResult: null,
   policyRollbackHistory: [],
   policyRollbackResult: null,
+  environmentSets: [],
+  roleBindings: [],
+  sessions: [],
+  sessionDetail: null,
+  effectiveEnvironment: null,
+  accessPermissions: null,
+  environmentVerification: null,
+  selectedEnvironmentSetId: '',
+  selectedSessionId: '',
   pendingApprovals: [],
   selectedRunId: null,
   timelineEvents: null,
@@ -28,7 +37,10 @@ const state = {
   runtimeView: 'approvals',
   workbenchSection: 'agent',
   journeySetupConfirmed: false,
-  journeyPresetId: 'opc'
+  journeyPresetId: 'opc',
+  starterBridgeProfile: null,
+  starterReadiness: null,
+  feishuStatus: null
 };
 
 const DEMO_BOOTSTRAP_PRESET = Object.freeze({
@@ -50,9 +62,111 @@ const ONE_PERSON_QUICKSTART_TEMPLATES = Object.freeze({
   })
 });
 
+const ENV_PROVIDER_TEMPLATES = Object.freeze({
+  feishu: Object.freeze({
+    label: 'Feishu',
+    subtitle: 'Approval & delivery',
+    entries: [
+      {
+        provider: 'feishu',
+        key: 'FLOCKMESH_FEISHU_WEBHOOK_URL',
+        value: 'https://open.feishu.cn/open-apis/bot/v2/hook/replace_me',
+        visibility: 'secret'
+      }
+    ]
+  }),
+  langfuse: Object.freeze({
+    label: 'Langfuse',
+    subtitle: 'Tracing & observability',
+    entries: [
+      {
+        provider: 'langfuse',
+        key: 'LANGFUSE_HOST',
+        value: 'https://cloud.langfuse.com',
+        visibility: 'plain'
+      },
+      {
+        provider: 'langfuse',
+        key: 'LANGFUSE_PUBLIC_KEY',
+        value: 'pk_replace_me',
+        visibility: 'secret'
+      },
+      {
+        provider: 'langfuse',
+        key: 'LANGFUSE_SECRET_KEY',
+        value: 'sk_replace_me',
+        visibility: 'secret'
+      }
+    ]
+  }),
+  aws: Object.freeze({
+    label: 'AWS',
+    subtitle: 'Cloud resources',
+    entries: [
+      {
+        provider: 'aws',
+        key: 'AWS_ACCESS_KEY_ID',
+        value: 'AKIA_REPLACE_ME',
+        visibility: 'secret'
+      },
+      {
+        provider: 'aws',
+        key: 'AWS_SECRET_ACCESS_KEY',
+        value: 'replace_secret',
+        visibility: 'secret'
+      },
+      {
+        provider: 'aws',
+        key: 'AWS_REGION',
+        value: 'us-east-1',
+        visibility: 'plain'
+      }
+    ]
+  }),
+  claude_code: Object.freeze({
+    label: 'Claude Code',
+    subtitle: 'IDE agent bridge',
+    entries: [
+      {
+        provider: 'claude_code',
+        key: 'ANTHROPIC_API_KEY',
+        value: 'sk-ant-api03-replace_me',
+        visibility: 'secret'
+      },
+      {
+        provider: 'claude_code',
+        key: 'ANTHROPIC_BASE_URL',
+        value: 'https://api.anthropic.com',
+        visibility: 'plain'
+      }
+    ]
+  }),
+  codex: Object.freeze({
+    label: 'Codex/OpenAI',
+    subtitle: 'IDE agent bridge',
+    entries: [
+      {
+        provider: 'codex',
+        key: 'OPENAI_API_KEY',
+        value: 'sk-proj-replace_me',
+        visibility: 'secret'
+      },
+      {
+        provider: 'codex',
+        key: 'OPENAI_BASE_URL',
+        value: 'https://api.openai.com/v1',
+        visibility: 'plain'
+      }
+    ]
+  })
+});
+
+const QUICKSTART_WORKSPACE_ID_PATTERN = /^wsp_[A-Za-z0-9_-]{6,64}$/;
+const QUICKSTART_OWNER_ID_PATTERN = /^usr_[A-Za-z0-9_-]{4,64}$/;
+
 const JOURNEY_PATH_PRESETS = Object.freeze({
   startup: Object.freeze({
-    label: 'Startup Team Path',
+    label: 'Team Setup',
     workspaceId: 'wsp_startup_launch',
     ownerId: 'usr_founder_ops',
     templateId: 'incident_response',
@@ -60,7 +174,7 @@ const JOURNEY_PATH_PRESETS = Object.freeze({
     idempotencyPrefix: 'idem_startup_first_run'
   }),
   opc: Object.freeze({
-    label: 'OPC Path',
+    label: 'Solo Setup',
     workspaceId: 'wsp_one_person_company',
     ownerId: 'usr_solo_builder',
     templateId: 'weekly_ops_sync',
@@ -70,9 +184,15 @@ const JOURNEY_PATH_PRESETS = Object.freeze({
 });
 
 const UI_MODE_STORAGE_KEY = 'flockmesh_ui_mode';
+const WORKSPACE_PATH_STORAGE_KEY = 'flockmesh_workspace_path';
 const UI_MODE_SET = new Set(['starter', 'advanced']);
 const RUNTIME_VIEW_SET = new Set(['approvals', 'runs']);
 const WORKBENCH_SECTION_SET = new Set(['agent', 'governance', 'observability']);
+let starterBridgeRefreshTimer = null;
+let starterBridgeRequestToken = 0;
+let starterReadinessRefreshTimer = null;
+let starterReadinessRequestToken = 0;
+let workspaceContextRefreshTimer = null;
 
 const els = {
   bootstrapBtn: document.getElementById('bootstrapBtn'),
@@ -103,18 +223,84 @@ const els = {
   runLaunchSummary: document.getElementById('runLaunchSummary'),
   quickstartTag: document.getElementById('quickstartTag'),
   quickstartWorkspaceInput: document.getElementById('quickstartWorkspaceInput'),
+  quickstartWorkspacePathInput: document.getElementById('quickstartWorkspacePathInput'),
+  quickstartWorkspacePathDefaultBtn: document.getElementById('quickstartWorkspacePathDefaultBtn'),
   quickstartOwnerInput: document.getElementById('quickstartOwnerInput'),
   quickstartTemplateSelect: document.getElementById('quickstartTemplateSelect'),
+  quickstartModeSelect: document.getElementById('quickstartModeSelect'),
   quickstartConnectorIdsInput: document.getElementById('quickstartConnectorIdsInput'),
   quickstartIdemInput: document.getElementById('quickstartIdemInput'),
   quickstartStartBtn: document.getElementById('quickstartStartBtn'),
+  envSetNameInput: document.getElementById('envSetNameInput'),
+  envSetScopeSelect: document.getElementById('envSetScopeSelect'),
+  envSetEntriesInput: document.getElementById('envSetEntriesInput'),
+  envProviderCards: document.getElementById('envProviderCards'),
+  envTemplateMeta: document.getElementById('envTemplateMeta'),
+  envTemplateTargetInput: document.getElementById('envTemplateTargetInput'),
+  envSetCreateBtn: document.getElementById('envSetCreateBtn'),
+  envSetCreateApplyBtn: document.getElementById('envSetCreateApplyBtn'),
+  envSetRefreshBtn: document.getElementById('envSetRefreshBtn'),
+  envSetSelect: document.getElementById('envSetSelect'),
+  envSetVerifyModeSelect: document.getElementById('envSetVerifyModeSelect'),
+  envSetVerifyTimeoutInput: document.getElementById('envSetVerifyTimeoutInput'),
+  envSetVerifyBtn: document.getElementById('envSetVerifyBtn'),
+  envSetActivateBtn: document.getElementById('envSetActivateBtn'),
+  envSetApplyRuntimeBtn: document.getElementById('envSetApplyRuntimeBtn'),
+  envSetMeta: document.getElementById('envSetMeta'),
+  envVerifySummary: document.getElementById('envVerifySummary'),
+  envSetPayload: document.getElementById('envSetPayload'),
+  quickstartGuideMeta: document.getElementById('quickstartGuideMeta'),
   quickstartMeta: document.getElementById('quickstartMeta'),
   quickstartPayload: document.getElementById('quickstartPayload'),
+  starterBridgeCommand: document.getElementById('starterBridgeCommand'),
+  starterBridgeCopyBtn: document.getElementById('starterBridgeCopyBtn'),
+  starterBridgeProfileBtn: document.getElementById('starterBridgeProfileBtn'),
+  starterBridgeMeta: document.getElementById('starterBridgeMeta'),
+  starterReadinessTag: document.getElementById('starterReadinessTag'),
+  starterReadinessProbeInput: document.getElementById('starterReadinessProbeInput'),
+  starterReadinessRefreshBtn: document.getElementById('starterReadinessRefreshBtn'),
+  starterReadinessMeta: document.getElementById('starterReadinessMeta'),
+  starterReadinessStageList: document.getElementById('starterReadinessStageList'),
+  starterReadinessActionList: document.getElementById('starterReadinessActionList'),
+  starterReadinessPayload: document.getElementById('starterReadinessPayload'),
+  feishuWebhookInput: document.getElementById('feishuWebhookInput'),
+  feishuWebhookSaveBtn: document.getElementById('feishuWebhookSaveBtn'),
+  feishuWebhookClearBtn: document.getElementById('feishuWebhookClearBtn'),
+  feishuWebhookTestBtn: document.getElementById('feishuWebhookTestBtn'),
+  feishuStatusMeta: document.getElementById('feishuStatusMeta'),
+  openApprovalInboxBtn: document.getElementById('openApprovalInboxBtn'),
+  latestExecutionEvidence: document.getElementById('latestExecutionEvidence'),
   runtimeFocusTag: document.getElementById('runtimeFocusTag'),
+  runtimeOpenWorkbenchBtn: document.getElementById('runtimeOpenWorkbenchBtn'),
   runtimeViewApprovalsBtn: document.getElementById('runtimeViewApprovalsBtn'),
   runtimeViewRunsBtn: document.getElementById('runtimeViewRunsBtn'),
   runtimeApprovalsPane: document.getElementById('runtimeApprovalsPane'),
   runtimeRunsPane: document.getElementById('runtimeRunsPane'),
+  accessPermissionsRefreshBtn: document.getElementById('accessPermissionsRefreshBtn'),
+  accessPermissionsMeta: document.getElementById('accessPermissionsMeta'),
+  accessPermissionsPayload: document.getElementById('accessPermissionsPayload'),
+  roleBindingActorInput: document.getElementById('roleBindingActorInput'),
+  roleBindingRoleSelect: document.getElementById('roleBindingRoleSelect'),
+  roleBindingGrantBtn: document.getElementById('roleBindingGrantBtn'),
+  roleBindingRefreshBtn: document.getElementById('roleBindingRefreshBtn'),
+  roleBindingMeta: document.getElementById('roleBindingMeta'),
+  roleBindingPayload: document.getElementById('roleBindingPayload'),
+  effectiveEnvActorInput: document.getElementById('effectiveEnvActorInput'),
+  effectiveEnvModeSelect: document.getElementById('effectiveEnvModeSelect'),
+  effectiveEnvIncludeValuesInput: document.getElementById('effectiveEnvIncludeValuesInput'),
+  effectiveEnvLoadBtn: document.getElementById('effectiveEnvLoadBtn'),
+  effectiveEnvMeta: document.getElementById('effectiveEnvMeta'),
+  effectiveEnvPayload: document.getElementById('effectiveEnvPayload'),
+  sessionFilterActorInput: document.getElementById('sessionFilterActorInput'),
+  sessionFilterStatusSelect: document.getElementById('sessionFilterStatusSelect'),
+  sessionRefreshBtn: document.getElementById('sessionRefreshBtn'),
+  sessionSelect: document.getElementById('sessionSelect'),
+  sessionIncludeEvidenceInput: document.getElementById('sessionIncludeEvidenceInput'),
+  sessionLoadDetailBtn: document.getElementById('sessionLoadDetailBtn'),
+  sessionList: document.getElementById('sessionList'),
+  sessionMeta: document.getElementById('sessionMeta'),
+  sessionPayload: document.getElementById('sessionPayload'),
+  sessionDetailPayload: document.getElementById('sessionDetailPayload'),
   advancedToolsOpenBtn: document.getElementById('advancedToolsOpenBtn'),
   workbenchAgentTabBtn: document.getElementById('workbenchAgentTabBtn'),
   workbenchGovernanceTabBtn: document.getElementById('workbenchGovernanceTabBtn'),
@@ -219,6 +405,27 @@ function logAction(label, payload) {
   els.actionLog.textContent = `${line}\n${els.actionLog.textContent}`.slice(0, 8000);
 }
 
+async function copyTextToClipboard(text) {
+  const normalized = String(text || '');
+  if (!normalized) return false;
+
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(normalized);
+    return true;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = normalized;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.top = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return copied;
+}
+
 function inferActorIdFromInit(init = {}) {
   if (typeof init?.body !== 'string' || !init.body.trim()) {
     return '';
@@ -248,8 +455,16 @@ function inferActorIdFromInit(init = {}) {
 function resolveUiActorId(init = {}) {
   const fromPayload = inferActorIdFromInit(init);
   if (fromPayload) return fromPayload;
+  const fallback = currentUiActorId();
+  if (fallback) return fallback;
+  return 'usr_yingapple';
+}
+
+function currentUiActorId() {
   const fromQuickstart = String(els.quickstartOwnerInput?.value || '').trim();
   if (fromQuickstart) return fromQuickstart;
+  const fromAccess = String(state.accessPermissions?.actor_id || '').trim();
+  if (fromAccess) return fromAccess;
   return 'usr_yingapple';
 }
 
@@ -342,6 +557,776 @@ function parseAuthRefsMap(value) {
   return map;
 }
 
+function currentWorkspaceId() {
+  return String(els.quickstartWorkspaceInput?.value || '').trim();
+}
+
+function currentQuickstartMode() {
+  return String(els.quickstartModeSelect?.value || 'opc').trim() || 'opc';
+}
+
+function setEnvironmentMeta(text, color = '#5f6b7f') {
+  if (!els.envSetMeta) return;
+  els.envSetMeta.textContent = text;
+  els.envSetMeta.style.color = color;
+}
+
+function setRoleBindingMeta(text, color = '#5f6b7f') {
+  if (!els.roleBindingMeta) return;
+  els.roleBindingMeta.textContent = text;
+  els.roleBindingMeta.style.color = color;
+}
+
+function setSessionMeta(text, color = '#5f6b7f') {
+  if (!els.sessionMeta) return;
+  els.sessionMeta.textContent = text;
+  els.sessionMeta.style.color = color;
+}
+
+function setEffectiveEnvMeta(text, color = '#5f6b7f') {
+  if (!els.effectiveEnvMeta) return;
+  els.effectiveEnvMeta.textContent = text;
+  els.effectiveEnvMeta.style.color = color;
+}
+
+function setEnvironmentTemplateMeta(text, color = '#5f6b7f') {
+  if (!els.envTemplateMeta) return;
+  els.envTemplateMeta.textContent = text;
+  els.envTemplateMeta.style.color = color;
+}
+
+function setAccessPermissionsMeta(text, color = '#5f6b7f') {
+  if (!els.accessPermissionsMeta) return;
+  els.accessPermissionsMeta.textContent = text;
+  els.accessPermissionsMeta.style.color = color;
+}
+
+function renderEnvironmentVerificationSummary(payload = null) {
+  if (!els.envVerifySummary) return;
+  els.envVerifySummary.innerHTML = '';
+
+  const report = payload?.report;
+  if (!report || !Array.isArray(report.providers) || !report.providers.length) {
+    return;
+  }
+
+  const connectivityByProvider = new Map(
+    Array.isArray(payload?.connectivity?.providers)
+      ? payload.connectivity.providers.map((item) => [String(item.provider || ''), item])
+      : []
+  );
+
+  for (const providerReport of report.providers) {
+    const providerName = String(providerReport.provider || 'generic');
+    const card = document.createElement('article');
+    card.className = 'env-verify-card';
+
+    const title = document.createElement('h4');
+    title.textContent = `${providerName} · ${String(providerReport.status || 'unknown').toUpperCase()}`;
+    const detail = document.createElement('p');
+    detail.textContent =
+      `checks ${providerReport.summary?.total_checks || 0} · fail ${providerReport.summary?.fail || 0} · warn ${providerReport.summary?.warn || 0}`;
+
+    card.append(title, detail);
+
+    const probe = connectivityByProvider.get(providerName);
+    if (probe) {
+      const probeLine = document.createElement('p');
+      probeLine.textContent =
+        `probe ${String(probe.status || 'skip').toUpperCase()} · reachable ${probe.reachable ? 'yes' : 'no'}${probe.http_status ? ` · http ${probe.http_status}` : ''}`;
+      card.append(probeLine);
+    }
+
+    const recs = Array.isArray(providerReport.recommendations)
+      ? providerReport.recommendations.filter(Boolean).slice(0, 2)
+      : [];
+    if (recs.length) {
+      const recLine = document.createElement('p');
+      recLine.textContent = `next: ${recs.join(' | ')}`;
+      card.append(recLine);
+    }
+
+    els.envVerifySummary.append(card);
+  }
+}
+
+function syncAccessDrivenControls() {
+  const payload = state.accessPermissions || {};
+  const permissions = new Set(Array.isArray(payload.permissions) ? payload.permissions : []);
+  const bootstrapAvailable = payload.bootstrap_available === true;
+
+  const canManageEnvironment = bootstrapAvailable || permissions.has('environment.manage');
+  const canManageRoles = bootstrapAvailable || permissions.has('role.manage');
+  const canReadSessions = bootstrapAvailable || permissions.has('session.read');
+
+  if (els.envSetCreateBtn) els.envSetCreateBtn.disabled = !canManageEnvironment;
+  if (els.envSetCreateApplyBtn) els.envSetCreateApplyBtn.disabled = !canManageEnvironment;
+  if (els.envSetVerifyBtn) els.envSetVerifyBtn.disabled = !canManageEnvironment;
+  if (els.envSetActivateBtn) els.envSetActivateBtn.disabled = !canManageEnvironment;
+  if (els.envSetApplyRuntimeBtn) els.envSetApplyRuntimeBtn.disabled = !canManageEnvironment;
+  if (els.roleBindingGrantBtn) els.roleBindingGrantBtn.disabled = !canManageRoles;
+  if (els.sessionRefreshBtn) els.sessionRefreshBtn.disabled = !canReadSessions;
+  if (els.sessionLoadDetailBtn) els.sessionLoadDetailBtn.disabled = !canReadSessions;
+}
+
+function toEnvironmentEntryLine(entry = {}) {
+  const provider = String(entry.provider || 'generic').trim();
+  const key = String(entry.key || '').trim();
+  const value = String(entry.value || '').trim();
+  const visibility = String(entry.visibility || '').trim();
+  const target = String(entry.target || '').trim();
+  if (!provider || !key || !value) return '';
+  if (!visibility && !target) return `${provider} ${key} ${value}`;
+  if (visibility && !target) return `${provider} ${key} ${value} ${visibility}`;
+  if (!visibility && target) return `${provider} ${key} ${value} ${target}`;
+  return `${provider} ${key} ${value} ${visibility} ${target}`;
+}
+
+function listEnvironmentEntryKeysFromText(rawText = '') {
+  const keys = new Set();
+  const lines = String(rawText || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith('#'));
+
+  for (const line of lines) {
+    const [providerRaw, keyRaw] = line.split(/\s+/).filter(Boolean);
+    const provider = String(providerRaw || '').trim().toLowerCase();
+    const key = String(keyRaw || '').trim().toUpperCase();
+    if (!provider || !key) continue;
+    keys.add(`${provider}::${key}`);
+  }
+
+  return keys;
+}
+
+function addEnvironmentProviderTemplate(templateId) {
+  const template = ENV_PROVIDER_TEMPLATES[templateId];
+  if (!template) {
+    setEnvironmentTemplateMeta(`Unknown template: ${templateId}`, '#d92d20');
+    return;
+  }
+
+  const existingText = String(els.envSetEntriesInput?.value || '');
+  const existingKeys = listEnvironmentEntryKeysFromText(existingText);
+  const templateTarget = String(els.envTemplateTargetInput?.value || '').trim();
+  const appended = [];
+
+  for (const entry of template.entries || []) {
+    const provider = String(entry.provider || 'generic').trim().toLowerCase();
+    const key = String(entry.key || '').trim().toUpperCase();
+    if (!provider || !key) continue;
+    const dedupeKey = `${provider}::${key}`;
+    if (existingKeys.has(dedupeKey)) continue;
+    const line = toEnvironmentEntryLine({
+      ...entry,
+      ...(templateTarget ? { target: templateTarget } : {})
+    });
+    if (!line) continue;
+    appended.push(line);
+    existingKeys.add(dedupeKey);
+  }
+
+  if (!appended.length) {
+    setEnvironmentTemplateMeta(`${template.label} keys already exist in entries.`, '#c17b23');
+    return;
+  }
+
+  const merged = [existingText.trim(), ...appended].filter(Boolean).join('\n');
+  els.envSetEntriesInput.value = merged;
+  setEnvironmentTemplateMeta(
+    `Inserted ${template.label} template (${appended.length} new key${appended.length > 1 ? 's' : ''}).`,
+    '#1d9a6c'
+  );
+}
+
+function renderEnvironmentProviderCards() {
+  if (!els.envProviderCards) return;
+  els.envProviderCards.innerHTML = '';
+
+  Object.entries(ENV_PROVIDER_TEMPLATES).forEach(([templateId, template]) => {
+    const card = document.createElement('article');
+    card.className = 'env-provider-card';
+
+    const title = document.createElement('h4');
+    title.textContent = template.label;
+    const subtitle = document.createElement('p');
+    subtitle.textContent = template.subtitle;
+    const button = document.createElement('button');
+    button.className = 'btn btn-ghost';
+    button.type = 'button';
+    button.textContent = 'Insert Template';
+    button.dataset.envTemplateId = templateId;
+    button.addEventListener('click', () => {
+      addEnvironmentProviderTemplate(templateId);
+    });
+
+    card.append(title, subtitle, button);
+    els.envProviderCards.append(card);
+  });
+}
+
+function parseEnvironmentEntriesText(rawText = '') {
+  const lines = String(rawText || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith('#'));
+
+  const visibilitySet = new Set(['secret', 'masked', 'plain']);
+  const entries = [];
+  for (const [index, line] of lines.entries()) {
+    const parts = line.split(/\s+/).filter(Boolean);
+    if (parts.length < 3) {
+      throw new Error(`Invalid entry at line ${index + 1}. Use: provider key value [visibility] [target]`);
+    }
+    const [provider, key, value, fourthRaw, fifthRaw] = parts;
+    let visibility = '';
+    let target = '';
+
+    if (fourthRaw) {
+      const normalizedFourth = String(fourthRaw || '').trim().toLowerCase();
+      if (visibilitySet.has(normalizedFourth)) {
+        visibility = normalizedFourth;
+        if (fifthRaw) {
+          target = String(fifthRaw || '').trim();
+        }
+      } else {
+        target = String(fourthRaw || '').trim();
+      }
+    }
+
+    const entry = {
+      provider,
+      key,
+      value
+    };
+    if (visibility) entry.visibility = visibility;
+    if (target) entry.target = target;
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function renderEnvironmentSetSelect() {
+  if (!els.envSetSelect) return;
+  els.envSetSelect.innerHTML = '';
+
+  const workspaceId = currentWorkspaceId();
+  const sets = state.environmentSets.filter((item) => item.workspace_id === workspaceId);
+  if (!sets.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No env sets';
+    els.envSetSelect.append(option);
+    state.selectedEnvironmentSetId = '';
+    return;
+  }
+
+  sets.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = `${item.name} (${item.scope}/${item.mode})${item.status === 'active' ? ' *active' : ''}`;
+    els.envSetSelect.append(option);
+  });
+
+  const preferred = sets.find((item) => item.id === state.selectedEnvironmentSetId)
+    || sets.find((item) => item.status === 'active')
+    || sets[0];
+  state.selectedEnvironmentSetId = preferred.id;
+  els.envSetSelect.value = preferred.id;
+}
+
+function readEnvironmentVerifyOptions() {
+  const mode = String(els.envSetVerifyModeSelect?.value || 'syntax').trim() || 'syntax';
+  const timeoutMsRaw = Number(els.envSetVerifyTimeoutInput?.value || 4000);
+  const timeoutMs = Number.isFinite(timeoutMsRaw)
+    ? Math.min(Math.max(Math.round(timeoutMsRaw), 500), 10000)
+    : 4000;
+  return {
+    probe_mode: mode === 'connectivity' ? 'connectivity' : 'syntax',
+    timeout_ms: timeoutMs
+  };
+}
+
+async function loadEnvironmentSets() {
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    setEnvironmentMeta('Workspace is required before loading environment sets.', '#c17b23');
+    return;
+  }
+
+  try {
+    const payload = await api(`/v0/environments/sets?workspace_id=${encodeURIComponent(workspaceId)}&limit=200&offset=0`);
+    state.environmentSets = payload.items || [];
+    renderEnvironmentSetSelect();
+    state.environmentVerification = null;
+    renderEnvironmentVerificationSummary(null);
+    els.envSetPayload.textContent = JSON.stringify(payload, null, 2);
+    setEnvironmentMeta(`Loaded ${state.environmentSets.length} environment set(s).`, '#1d9a6c');
+  } catch (err) {
+    setEnvironmentMeta(`Failed to load environment sets: ${String(err)}`, '#d92d20');
+    els.envSetPayload.textContent = String(err);
+  }
+}
+
+async function createEnvironmentSet() {
+  const workspaceId = currentWorkspaceId();
+  const name = String(els.envSetNameInput?.value || '').trim();
+  const mode = currentQuickstartMode();
+  const scope = String(els.envSetScopeSelect?.value || 'workspace').trim() || 'workspace';
+  const entriesText = String(els.envSetEntriesInput?.value || '').trim();
+
+  if (!workspaceId) {
+    setEnvironmentMeta('Workspace is required.', '#d92d20');
+    return;
+  }
+  if (!name) {
+    setEnvironmentMeta('Environment set name is required.', '#d92d20');
+    return;
+  }
+  if (!entriesText) {
+    setEnvironmentMeta('At least one environment entry is required.', '#d92d20');
+    return;
+  }
+
+  try {
+    const entries = parseEnvironmentEntriesText(entriesText);
+    const payload = await api('/v0/environments/sets', {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        mode,
+        scope,
+        name,
+        status: 'active',
+        entries
+      })
+    });
+    state.selectedEnvironmentSetId = payload.id;
+    setEnvironmentMeta(`Created environment set ${payload.id}.`, '#1d9a6c');
+    els.envSetPayload.textContent = JSON.stringify(payload, null, 2);
+    await loadEnvironmentSets();
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+    return payload;
+  } catch (err) {
+    setEnvironmentMeta(`Failed to create environment set: ${String(err)}`, '#d92d20');
+    els.envSetPayload.textContent = String(err);
+    return null;
+  }
+}
+
+async function verifySelectedEnvironmentSet({ quiet = false } = {}) {
+  const setId = String(els.envSetSelect?.value || '').trim();
+  if (!setId) {
+    setEnvironmentMeta('Select an environment set first.', '#d92d20');
+    return null;
+  }
+
+  try {
+    const verifyOptions = readEnvironmentVerifyOptions();
+    const payload = await api(`/v0/environments/sets/${encodeURIComponent(setId)}/verify`, {
+      method: 'POST',
+      body: JSON.stringify(verifyOptions)
+    });
+    state.environmentVerification = payload;
+    renderEnvironmentVerificationSummary(payload);
+    els.envSetPayload.textContent = JSON.stringify(payload, null, 2);
+
+    const status = String(payload?.report?.status || 'warn');
+    const summary = payload?.report?.summary || {};
+    const probeSummary = payload?.connectivity?.summary;
+    const probeSuffix = probeSummary
+      ? ` · probe fail ${probeSummary.fail || 0} warn ${probeSummary.warn || 0}`
+      : '';
+    const label = `Verify ${status.toUpperCase()} · providers ${summary.total_providers || 0} · checks ${summary.total_checks || 0} (fail ${summary.fail || 0}, warn ${summary.warn || 0})${probeSuffix}`;
+    if (!quiet || status !== 'pass') {
+      setEnvironmentMeta(label, status === 'fail' ? '#d92d20' : status === 'warn' ? '#c17b23' : '#1d9a6c');
+    }
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+    return payload;
+  } catch (err) {
+    setEnvironmentMeta(`Failed to verify environment set: ${String(err)}`, '#d92d20');
+    els.envSetPayload.textContent = String(err);
+    return null;
+  }
+}
+
+async function activateSelectedEnvironmentSet() {
+  const setId = String(els.envSetSelect?.value || '').trim();
+  if (!setId) {
+    setEnvironmentMeta('Select an environment set first.', '#d92d20');
+    return;
+  }
+
+  try {
+    const payload = await api(`/v0/environments/sets/${encodeURIComponent(setId)}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+    state.selectedEnvironmentSetId = payload.id;
+    els.envSetPayload.textContent = JSON.stringify(payload, null, 2);
+    setEnvironmentMeta(`Activated environment set ${payload.id}.`, '#1d9a6c');
+    await loadEnvironmentSets();
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+  } catch (err) {
+    setEnvironmentMeta(`Failed to activate environment set: ${String(err)}`, '#d92d20');
+    els.envSetPayload.textContent = String(err);
+  }
+}
+
+async function applySelectedEnvironmentSetRuntime() {
+  const setId = String(els.envSetSelect?.value || '').trim();
+  if (!setId) {
+    setEnvironmentMeta('Select an environment set first.', '#d92d20');
+    return;
+  }
+
+  try {
+    const payload = await api(`/v0/environments/sets/${encodeURIComponent(setId)}/apply-runtime`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+    els.envSetPayload.textContent = JSON.stringify(payload, null, 2);
+    setEnvironmentMeta(
+      payload?.runtime_updates?.feishu_webhook_applied
+        ? 'Applied env set to runtime (Feishu webhook active).'
+        : 'Applied env set to runtime.',
+      '#1d9a6c'
+    );
+    await loadFeishuStatus();
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+  } catch (err) {
+    setEnvironmentMeta(`Failed to apply env set to runtime: ${String(err)}`, '#d92d20');
+    els.envSetPayload.textContent = String(err);
+  }
+}
+
+async function createActivateApplyEnvironmentSet() {
+  const created = await createEnvironmentSet();
+  if (!created?.id) return;
+  state.selectedEnvironmentSetId = created.id;
+  if (els.envSetSelect) {
+    els.envSetSelect.value = created.id;
+  }
+  await activateSelectedEnvironmentSet();
+  await verifySelectedEnvironmentSet({ quiet: true });
+  await applySelectedEnvironmentSetRuntime();
+  setEnvironmentMeta('Created, activated, verified, and applied environment set to runtime.', '#1d9a6c');
+  scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+}
+
+async function loadAccessPermissions() {
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    setAccessPermissionsMeta('Workspace is required before loading access.', '#c17b23');
+    return;
+  }
+
+  const actorId = String(els.quickstartOwnerInput?.value || '').trim();
+  const query = new URLSearchParams();
+  query.set('workspace_id', workspaceId);
+  if (actorId) {
+    query.set('actor_id', actorId);
+  }
+
+  try {
+    const payload = await api(`/v0/access/permissions?${query.toString()}`);
+    state.accessPermissions = payload;
+    els.accessPermissionsPayload.textContent = JSON.stringify(payload, null, 2);
+    setAccessPermissionsMeta(
+      `Roles ${payload.roles.length} · Permissions ${payload.permissions.length} · Bootstrap ${payload.bootstrap_available ? 'available' : 'off'}.`,
+      '#1d9a6c'
+    );
+    syncAccessDrivenControls();
+  } catch (err) {
+    state.accessPermissions = null;
+    setAccessPermissionsMeta(`Failed to load access: ${String(err)}`, '#d92d20');
+    els.accessPermissionsPayload.textContent = String(err);
+    syncAccessDrivenControls();
+  }
+}
+
+async function loadRoleBindings() {
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    setRoleBindingMeta('Workspace is required before loading role bindings.', '#c17b23');
+    return;
+  }
+
+  try {
+    const payload = await api(`/v0/access/role-bindings?workspace_id=${encodeURIComponent(workspaceId)}&limit=200&offset=0`);
+    state.roleBindings = payload.items || [];
+    els.roleBindingPayload.textContent = JSON.stringify(payload, null, 2);
+    setRoleBindingMeta(`Loaded ${state.roleBindings.length} role binding(s).`, '#1d9a6c');
+  } catch (err) {
+    setRoleBindingMeta(`Failed to load role bindings: ${String(err)}`, '#d92d20');
+    els.roleBindingPayload.textContent = String(err);
+  }
+}
+
+async function loadEffectiveEnvironment() {
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    setEffectiveEnvMeta('Workspace is required before loading effective environment.', '#c17b23');
+    return null;
+  }
+
+  const actorId = String(els.effectiveEnvActorInput?.value || '').trim()
+    || String(els.quickstartOwnerInput?.value || '').trim();
+  const mode = String(els.effectiveEnvModeSelect?.value || 'all').trim();
+  const includeValues = Boolean(els.effectiveEnvIncludeValuesInput?.checked);
+
+  const query = new URLSearchParams();
+  query.set('workspace_id', workspaceId);
+  if (actorId) query.set('actor_id', actorId);
+  if (mode && mode !== 'all') query.set('mode', mode);
+  if (includeValues) query.set('include_values', 'true');
+
+  try {
+    const payload = await api(`/v0/environments/effective?${query.toString()}`);
+    state.effectiveEnvironment = payload;
+    if (els.effectiveEnvPayload) {
+      els.effectiveEnvPayload.textContent = JSON.stringify(payload, null, 2);
+    }
+    setEffectiveEnvMeta(
+      `Loaded ${payload.total || 0} effective env entries for ${payload.actor_id || actorId || 'actor'}.`,
+      '#1d9a6c'
+    );
+    return payload;
+  } catch (err) {
+    state.effectiveEnvironment = null;
+    if (els.effectiveEnvPayload) {
+      els.effectiveEnvPayload.textContent = String(err);
+    }
+    setEffectiveEnvMeta(`Failed to load effective environment: ${String(err)}`, '#d92d20');
+    return null;
+  }
+}
+
+async function grantRoleBinding() {
+  const workspaceId = currentWorkspaceId();
+  const actorId = String(els.roleBindingActorInput?.value || '').trim();
+  const role = String(els.roleBindingRoleSelect?.value || '').trim();
+
+  if (!workspaceId) {
+    setRoleBindingMeta('Workspace is required.', '#d92d20');
+    return;
+  }
+  if (!actorId) {
+    setRoleBindingMeta('Grant actor is required.', '#d92d20');
+    return;
+  }
+
+  try {
+    const payload = await api('/v0/access/role-bindings', {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        actor_id: actorId,
+        role
+      })
+    });
+    els.roleBindingPayload.textContent = JSON.stringify(payload, null, 2);
+    setRoleBindingMeta(`Granted ${role} to ${actorId}.`, '#1d9a6c');
+    await Promise.all([
+      loadRoleBindings(),
+      loadAccessPermissions(),
+      loadEffectiveEnvironment()
+    ]);
+  } catch (err) {
+    setRoleBindingMeta(`Failed to grant role: ${String(err)}`, '#d92d20');
+    els.roleBindingPayload.textContent = String(err);
+  }
+}
+
+function buildSessionListQuery() {
+  const workspaceId = currentWorkspaceId();
+  const query = new URLSearchParams();
+  query.set('workspace_id', workspaceId);
+  query.set('limit', '100');
+  query.set('offset', '0');
+
+  const actorFilter = String(els.sessionFilterActorInput?.value || '').trim();
+  if (actorFilter) {
+    query.set('actor_id', actorFilter);
+  }
+
+  const statusFilter = String(els.sessionFilterStatusSelect?.value || 'all').trim();
+  if (statusFilter && statusFilter !== 'all') {
+    query.set('status', statusFilter);
+  }
+
+  return query;
+}
+
+async function loadSessions() {
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) {
+    setSessionMeta('Workspace is required before loading sessions.', '#c17b23');
+    return;
+  }
+
+  try {
+    const payload = await api(`/v0/sessions?${buildSessionListQuery().toString()}`);
+    state.sessions = payload.items || [];
+    renderSessionSelect();
+    renderSessionList();
+    if (!state.selectedSessionId && els.sessionDetailPayload) {
+      els.sessionDetailPayload.textContent = 'No session detail payload.';
+    }
+    els.sessionPayload.textContent = JSON.stringify(payload, null, 2);
+    setSessionMeta(`Loaded ${state.sessions.length} session(s).`, '#1d9a6c');
+  } catch (err) {
+    setSessionMeta(`Failed to load sessions: ${String(err)}`, '#d92d20');
+    els.sessionPayload.textContent = String(err);
+    if (els.sessionList) {
+      els.sessionList.innerHTML = '';
+    }
+  }
+}
+
+function renderSessionSelect() {
+  if (!els.sessionSelect) return;
+  els.sessionSelect.innerHTML = '';
+  const items = Array.isArray(state.sessions) ? state.sessions : [];
+  if (!items.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No sessions';
+    els.sessionSelect.append(option);
+    state.selectedSessionId = '';
+    state.sessionDetail = null;
+    return;
+  }
+
+  items.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = String(item.session_id || '');
+    const started = String(item.started_at || '').replace('T', ' ').slice(0, 19);
+    option.textContent = `${item.session_id} · ${item.status} · ${started || 'unknown'}`;
+    els.sessionSelect.append(option);
+  });
+
+  const preferred = items.find((item) => item.session_id === state.selectedSessionId) || items[0];
+  state.selectedSessionId = String(preferred?.session_id || '');
+  els.sessionSelect.value = state.selectedSessionId;
+}
+
+function renderSessionList() {
+  if (!els.sessionList) return;
+  els.sessionList.innerHTML = '';
+
+  const items = Array.isArray(state.sessions) ? state.sessions : [];
+  if (!items.length) {
+    els.sessionList.innerHTML = '<p class="run-meta">No session summaries yet.</p>';
+    return;
+  }
+
+  const top = items.slice(0, 8);
+  for (const item of top) {
+    const card = document.createElement('article');
+    card.className = 'session-card';
+    if (item.session_id === state.selectedSessionId) {
+      card.style.borderColor = '#b8cbf5';
+      card.style.boxShadow = 'inset 0 0 0 1px rgba(20, 86, 240, 0.08)';
+    }
+
+    const title = document.createElement('h4');
+    title.textContent = item.session_id || 'session';
+    const line1 = document.createElement('p');
+    line1.textContent = `status ${item.status} · actor ${item.actor_id || '-'} · playbook ${item.playbook_id || '-'}`;
+    const line2 = document.createElement('p');
+    line2.textContent = `pending ${item.pending_approvals || 0} · policy allow ${item.policy_summary?.allow || 0} escalate ${item.policy_summary?.escalate || 0} deny ${item.policy_summary?.deny || 0}`;
+    const line3 = document.createElement('p');
+    line3.textContent = `started ${String(item.started_at || '').replace('T', ' ').slice(0, 19) || '-'} · revision ${item.revision || 1}`;
+
+    const actions = document.createElement('div');
+    actions.className = 'run-actions';
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'btn btn-ghost';
+    openBtn.textContent = 'Open Detail';
+    openBtn.addEventListener('click', async () => {
+      state.selectedSessionId = String(item.session_id || '');
+      if (els.sessionSelect) {
+        els.sessionSelect.value = state.selectedSessionId;
+      }
+      await loadSelectedSessionDetail();
+      renderSessionList();
+    });
+    actions.append(openBtn);
+
+    card.append(title, line1, line2, line3, actions);
+    els.sessionList.append(card);
+  }
+}
+
+async function loadSelectedSessionDetail() {
+  const sessionId = String(els.sessionSelect?.value || state.selectedSessionId || '').trim();
+  if (!sessionId) {
+    setSessionMeta('Select a session first.', '#d92d20');
+    return null;
+  }
+  state.selectedSessionId = sessionId;
+
+  const includeEvidence = Boolean(els.sessionIncludeEvidenceInput?.checked);
+  const query = new URLSearchParams();
+  if (includeEvidence) query.set('include_evidence', 'true');
+  query.set('limit', '120');
+
+  try {
+    const payload = await api(`/v0/sessions/${encodeURIComponent(sessionId)}?${query.toString()}`);
+    state.sessionDetail = payload;
+    if (els.sessionDetailPayload) {
+      els.sessionDetailPayload.textContent = JSON.stringify(payload, null, 2);
+    }
+
+    const eventsCount = Number(payload?.evidence?.events?.items?.length || 0);
+    const auditCount = Number(payload?.evidence?.audit?.items?.length || 0);
+    setSessionMeta(
+      includeEvidence
+        ? `Loaded session ${sessionId} with evidence (events ${eventsCount}, audit ${auditCount}).`
+        : `Loaded session ${sessionId}.`,
+      '#1d9a6c'
+    );
+    return payload;
+  } catch (err) {
+    setSessionMeta(`Failed to load session detail: ${String(err)}`, '#d92d20');
+    if (els.sessionDetailPayload) {
+      els.sessionDetailPayload.textContent = String(err);
+    }
+    return null;
+  }
+}
+
+async function refreshWorkspaceContext() {
+  await Promise.all([
+    loadEnvironmentSets(),
+    loadAccessPermissions(),
+    loadRoleBindings(),
+    loadEffectiveEnvironment(),
+    loadSessions()
+  ]);
+}
+
+function scheduleWorkspaceContextRefresh({ immediate = false } = {}) {
+  if (workspaceContextRefreshTimer) {
+    clearTimeout(workspaceContextRefreshTimer);
+    workspaceContextRefreshTimer = null;
+  }
+
+  if (immediate) {
+    void refreshWorkspaceContext();
+    return;
+  }
+
+  workspaceContextRefreshTimer = setTimeout(() => {
+    void refreshWorkspaceContext();
+  }, 280);
+}
+
 function setQuickstartTag(label, color = '#5f6b7f') {
   els.quickstartTag.textContent = label;
   els.quickstartTag.style.color = color;
@@ -371,6 +1356,10 @@ function readInitialUiMode() {
   const persisted = window.localStorage.getItem(UI_MODE_STORAGE_KEY);
   if (UI_MODE_SET.has(persisted)) return persisted;
   return 'starter';
+}
+
+function readInitialWorkspacePath() {
+  return String(window.localStorage.getItem(WORKSPACE_PATH_STORAGE_KEY) || '').trim();
 }
 
 function setUiMode(mode, { persist = true } = {}) {
@@ -411,7 +1400,7 @@ function setRuntimeView(view) {
   els.runtimeViewApprovalsBtn.classList.toggle('btn-ghost', !showApprovals);
   els.runtimeViewRunsBtn.classList.toggle('btn-secondary', !showApprovals);
   els.runtimeViewRunsBtn.classList.toggle('btn-ghost', showApprovals);
-  els.runtimeFocusTag.textContent = showApprovals ? 'pending decisions' : 'active runs';
+  els.runtimeFocusTag.textContent = showApprovals ? 'approvals' : 'runs';
 }
 
 function resolveJourneyPresetId(value) {
@@ -465,13 +1454,20 @@ function applyJourneyPreset(presetId, { focus = true, enforceStarterMode = true 
 
   els.quickstartWorkspaceInput.value = preset.workspaceId;
   els.quickstartOwnerInput.value = preset.ownerId;
+  if (els.effectiveEnvActorInput && !String(els.effectiveEnvActorInput.value || '').trim()) {
+    els.effectiveEnvActorInput.value = preset.ownerId;
+  }
   els.quickstartTemplateSelect.value = preset.templateId;
+  els.quickstartModeSelect.value = nextPresetId === 'startup' ? 'organization' : 'opc';
   els.quickstartConnectorIdsInput.value = preset.connectorIds.join(', ');
   els.quickstartIdemInput.value = buildJourneyPresetIdempotencyKey(nextPresetId);
 
   state.quickstartResult = null;
-  els.quickstartMeta.textContent = `${preset.label} selected. Review Step 1 fields, then Continue To Step 2.`;
+  els.quickstartMeta.textContent = `${preset.label} selected. Confirm Step 1 inputs, then continue to Step 2.`;
   updateJourneyState();
+  scheduleStarterBridgeProfileRefresh({ immediate: true });
+  scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+  scheduleWorkspaceContextRefresh({ immediate: true });
   setJourneyPresetUi();
   if (focus) {
     focusQuickstartSetup();
@@ -484,20 +1480,556 @@ function applyJourneyPreset(presetId, { focus = true, enforceStarterMode = true 
   });
 }
 
-function quickstartSetupReady() {
+function quickstartSetupSnapshot() {
   const workspaceId = String(els.quickstartWorkspaceInput.value || '').trim();
+  const workspacePath = String(els.quickstartWorkspacePathInput?.value || '').trim();
   const ownerId = String(els.quickstartOwnerInput.value || '').trim();
   const templateId = selectedQuickstartTemplateId();
-  return Boolean(workspaceId && ownerId && templateId);
+  const mode = currentQuickstartMode();
+  const errors = [];
+
+  if (!workspaceId) {
+    errors.push('Workspace ID is required.');
+  } else if (!QUICKSTART_WORKSPACE_ID_PATTERN.test(workspaceId)) {
+    errors.push('Use format: wsp_team_alpha (must start with "wsp_").');
+  }
+
+  if (!ownerId) {
+    errors.push('Owner ID is required.');
+  } else if (!QUICKSTART_OWNER_ID_PATTERN.test(ownerId)) {
+    errors.push('Use format: usr_alice_ops (must start with "usr_").');
+  }
+
+  if (!templateId) {
+    errors.push('Template is required.');
+  }
+
+  return {
+    workspaceId,
+    workspacePath,
+    ownerId,
+    templateId,
+    mode,
+    errors,
+    ready: errors.length === 0
+  };
+}
+
+function quickstartSetupReady() {
+  return quickstartSetupSnapshot().ready;
+}
+
+function renderQuickstartGuideMeta(snapshot = quickstartSetupSnapshot()) {
+  if (!els.quickstartGuideMeta) return;
+
+  if (snapshot.errors.length) {
+    els.quickstartGuideMeta.textContent = `Before Step 2: ${snapshot.errors[0]}`;
+    els.quickstartGuideMeta.style.color = '#d92d20';
+    return;
+  }
+
+  const template = ONE_PERSON_QUICKSTART_TEMPLATES[snapshot.templateId];
+  const modeText = snapshot.mode === 'organization'
+    ? 'Organization mode enables role-based access and audit.'
+    : 'OPC mode is optimized for a single operator.';
+  const workspacePathText = snapshot.workspacePath
+    ? ` Workspace folder is set: ${snapshot.workspacePath}.`
+    : ' Workspace folder is optional; add it only for Claude/Codex local file operations.';
+  els.quickstartGuideMeta.textContent =
+    `Ready for Step 2. Workspace ${snapshot.workspaceId}. Owner ${snapshot.ownerId}. ` +
+    `Mode ${snapshot.mode.toUpperCase()}. Template ${template?.label || snapshot.templateId}. ` +
+    `${modeText} ${workspacePathText}`;
+  els.quickstartGuideMeta.style.color = '#1d9a6c';
+}
+
+function toShellArg(rawValue = '') {
+  const value = String(rawValue ?? '');
+  if (!value) return "''";
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function buildStarterBridgeProfilePath(snapshot = quickstartSetupSnapshot()) {
+  const workspaceId = QUICKSTART_WORKSPACE_ID_PATTERN.test(snapshot.workspaceId)
+    ? snapshot.workspaceId
+    : 'wsp_mindverse_cn';
+  const params = new URLSearchParams({
+    workspace_id: workspaceId
+  });
+  if (snapshot.workspacePath) {
+    params.set('workspace_path', snapshot.workspacePath);
+  }
+  if (QUICKSTART_OWNER_ID_PATTERN.test(snapshot.ownerId)) {
+    params.set('actor_id', snapshot.ownerId);
+  }
+  return `/v0/integrations/agent-ide-profile?${params.toString()}`;
+}
+
+function buildStarterBridgeCommandFromProfile(profile = null) {
+  const bridge = profile?.mcp_bridge || {};
+  const command = String(bridge.command || '').trim();
+  const args = Array.isArray(bridge.args)
+    ? bridge.args.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  const cwd = String(bridge.cwd || '').trim();
+  const env = bridge.env && typeof bridge.env === 'object' ? bridge.env : {};
+  const envEntries = Object.entries(env)
+    .map(([key, value]) => [String(key || '').trim(), String(value || '')])
+    .filter(([key]) => Boolean(key));
+
+  if (!command) return '';
+
+  const execLine = [toShellArg(command), ...args.map((item) => toShellArg(item))].join(' ');
+  const envLine = envEntries.length
+    ? `${envEntries.map(([key, value]) => `${key}=${toShellArg(value)}`).join(' \\\n')} \\\n${execLine}`
+    : execLine;
+  return cwd ? `cd ${toShellArg(cwd)}\n${envLine}` : envLine;
+}
+
+function buildStarterBridgeFallbackCommand(snapshot = quickstartSetupSnapshot()) {
+  const lines = [
+    `FLOCKMESH_WORKSPACE_ID=${toShellArg(snapshot.workspaceId || 'wsp_mindverse_cn')} \\`,
+    ...(snapshot.workspacePath ? [`FLOCKMESH_WORKSPACE_PATH=${toShellArg(snapshot.workspacePath)} \\`] : []),
+    `FLOCKMESH_ACTOR_ID=${toShellArg(snapshot.ownerId || currentUiActorId())} \\`,
+    'npm run mcp:bridge'
+  ];
+  return lines.join('\n');
+}
+
+function setStarterBridgeMeta(text, color = '#5f6b7f') {
+  if (!els.starterBridgeMeta) return;
+  els.starterBridgeMeta.textContent = text;
+  els.starterBridgeMeta.style.color = color;
+}
+
+function setStarterBridgeCommand(command = '', { disableCopy = false } = {}) {
+  if (!els.starterBridgeCommand) return;
+  const normalized = String(command || '').trim();
+  els.starterBridgeCommand.textContent = normalized || 'No bridge command available yet.';
+  if (els.starterBridgeCopyBtn) {
+    els.starterBridgeCopyBtn.disabled = disableCopy || !normalized;
+  }
+}
+
+function setStarterReadinessMeta(text, color = '#5f6b7f') {
+  if (!els.starterReadinessMeta) return;
+  els.starterReadinessMeta.textContent = text;
+  els.starterReadinessMeta.style.color = color;
+}
+
+function setStarterReadinessTag(label, color = '#5f6b7f') {
+  if (!els.starterReadinessTag) return;
+  els.starterReadinessTag.textContent = label;
+  els.starterReadinessTag.style.color = color;
+}
+
+function clearStarterReadinessView(message = 'No readiness payload.') {
+  if (els.starterReadinessPayload) {
+    els.starterReadinessPayload.textContent = message;
+  }
+  if (els.starterReadinessStageList) {
+    els.starterReadinessStageList.innerHTML = '';
+  }
+  if (els.starterReadinessActionList) {
+    els.starterReadinessActionList.innerHTML = '<p class="run-meta">No actions yet.</p>';
+  }
+  setStarterReadinessTag('idle');
+  setStarterReadinessMeta('Run readiness check to see blockers.');
+}
+
+function readinessColorFromStatus(status = 'warn') {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'pass') return '#1d9a6c';
+  if (normalized === 'fail') return '#d92d20';
+  return '#c17b23';
+}
+
+function renderStarterReadiness(payload = null) {
+  if (!payload || typeof payload !== 'object') {
+    clearStarterReadinessView('No readiness payload.');
+    return;
+  }
+
+  state.starterReadiness = payload;
+  if (els.starterReadinessPayload) {
+    els.starterReadinessPayload.textContent = JSON.stringify(payload, null, 2);
+  }
+
+  const score = payload.score || {};
+  const scoreStatus = String(score.status || 'warn').trim().toLowerCase();
+  const grade = String(score.grade || 'unknown').replace(/_/g, ' ');
+  setStarterReadinessTag(
+    `${score.points ?? 0}/${score.max_points ?? 0} ${grade}`,
+    readinessColorFromStatus(scoreStatus)
+  );
+  setStarterReadinessMeta(
+    `Score ${score.percent ?? 0}% · pass ${score.summary?.pass ?? 0} · warn ${score.summary?.warn ?? 0} · fail ${score.summary?.fail ?? 0}.`,
+    readinessColorFromStatus(scoreStatus)
+  );
+
+  if (els.starterReadinessStageList) {
+    els.starterReadinessStageList.innerHTML = '';
+    const stages = Array.isArray(payload.stages) ? payload.stages : [];
+    for (const stage of stages) {
+      const status = String(stage?.status || 'warn').trim().toLowerCase();
+      const card = document.createElement('article');
+      card.className = `readiness-stage-card status-${status}`;
+
+      const title = document.createElement('h4');
+      title.textContent = `${stage.title || stage.id || 'stage'} · ${status.toUpperCase()}`;
+
+      const summary = document.createElement('p');
+      summary.textContent = String(stage.summary || '');
+
+      const detail = document.createElement('p');
+      detail.textContent = `weight ${stage.weight ?? 0} · ${stage.required === false ? 'optional' : 'required'}`;
+
+      card.append(title, summary, detail);
+      els.starterReadinessStageList.append(card);
+    }
+  }
+
+  if (els.starterReadinessActionList) {
+    els.starterReadinessActionList.innerHTML = '';
+    const actions = Array.isArray(payload.next_actions) ? payload.next_actions : [];
+    if (!actions.length) {
+      els.starterReadinessActionList.innerHTML = '<p class="run-meta">No actions. You can start the run.</p>';
+    } else {
+      for (const action of actions) {
+        const item = document.createElement('article');
+        item.className = 'readiness-action-item';
+
+        const title = document.createElement('strong');
+        title.textContent = action.title || action.action_id || 'action';
+
+        const description = document.createElement('p');
+        description.textContent = String(action.description || '');
+
+        const cta = document.createElement('p');
+        cta.textContent = action.cta ? `How to fix: ${action.cta}` : '';
+        cta.style.fontFamily = "'IBM Plex Mono', monospace";
+
+        item.append(title, description);
+        if (action.cta) {
+          item.append(cta);
+        }
+        els.starterReadinessActionList.append(item);
+      }
+    }
+  }
+}
+
+function buildStarterReadinessPath({
+  includeProbe = Boolean(els.starterReadinessProbeInput?.checked)
+} = {}) {
+  const snapshot = quickstartSetupSnapshot();
+  if (!snapshot.workspaceId || !QUICKSTART_WORKSPACE_ID_PATTERN.test(snapshot.workspaceId)) {
+    throw new Error('Workspace ID is required before readiness check.');
+  }
+  if (!snapshot.ownerId || !QUICKSTART_OWNER_ID_PATTERN.test(snapshot.ownerId)) {
+    throw new Error('Owner ID is required before readiness check.');
+  }
+
+  const query = new URLSearchParams();
+  query.set('workspace_id', snapshot.workspaceId);
+  query.set('actor_id', snapshot.ownerId);
+  query.set('mode', snapshot.mode);
+  if (snapshot.workspacePath) {
+    query.set('workspace_path', snapshot.workspacePath);
+  }
+  if (includeProbe) {
+    query.set('include_probe', 'true');
+  }
+  return `/v0/workstation/readiness?${query.toString()}`;
+}
+
+async function loadStarterReadiness({
+  includeProbe = Boolean(els.starterReadinessProbeInput?.checked),
+  quiet = false
+} = {}) {
+  const snapshot = quickstartSetupSnapshot();
+  if (!snapshot.workspaceId || !QUICKSTART_WORKSPACE_ID_PATTERN.test(snapshot.workspaceId) || !snapshot.ownerId || !QUICKSTART_OWNER_ID_PATTERN.test(snapshot.ownerId)) {
+    state.starterReadiness = null;
+    clearStarterReadinessView('No readiness payload.');
+    if (!quiet) {
+      setStarterReadinessMeta(
+        'Fill valid Workspace ID and Owner ID in Step 1 before readiness check.',
+        '#c17b23'
+      );
+    }
+    return null;
+  }
+
+  const requestToken = ++starterReadinessRequestToken;
+  if (!quiet) {
+    setStarterReadinessMeta('Checking readiness...', '#c17b23');
+  }
+
+  try {
+    const payload = await api(buildStarterReadinessPath({ includeProbe }));
+    if (requestToken !== starterReadinessRequestToken) return null;
+    renderStarterReadiness(payload);
+    return payload;
+  } catch (err) {
+    if (requestToken !== starterReadinessRequestToken) return null;
+    state.starterReadiness = null;
+    if (els.starterReadinessPayload) {
+      els.starterReadinessPayload.textContent = String(err);
+    }
+    if (els.starterReadinessStageList) {
+      els.starterReadinessStageList.innerHTML = '';
+    }
+    if (els.starterReadinessActionList) {
+      els.starterReadinessActionList.innerHTML = '<p class="run-meta">Readiness actions unavailable.</p>';
+    }
+    setStarterReadinessTag('error', '#d92d20');
+    setStarterReadinessMeta(`Readiness check failed: ${String(err)}`, '#d92d20');
+    return null;
+  }
+}
+
+function scheduleStarterReadinessRefresh({ immediate = false, quiet = true } = {}) {
+  if (starterReadinessRefreshTimer) {
+    clearTimeout(starterReadinessRefreshTimer);
+    starterReadinessRefreshTimer = null;
+  }
+
+  if (immediate) {
+    void loadStarterReadiness({ quiet });
+    return;
+  }
+
+  starterReadinessRefreshTimer = setTimeout(() => {
+    void loadStarterReadiness({ quiet });
+  }, 650);
+}
+
+function setFeishuStatusMeta(text, color = '#5f6b7f') {
+  if (!els.feishuStatusMeta) return;
+  els.feishuStatusMeta.textContent = text;
+  els.feishuStatusMeta.style.color = color;
+}
+
+function formatFeishuStatusText(status = null) {
+  if (!status || typeof status !== 'object') {
+    return 'Feishu status unavailable.';
+  }
+
+  const mode = String(status.delivery_mode || 'stub');
+  if (status.connected) {
+    const masked = String(status.webhook_masked || '').trim();
+    return `Feishu connected (${status.source || 'unknown'}) · mode ${mode}${masked ? ` · ${masked}` : ''}`;
+  }
+  return `Feishu not connected · mode ${mode} (stub). Add webhook for real delivery.`;
+}
+
+async function loadFeishuStatus() {
+  try {
+    const payload = await api('/v0/integrations/feishu/status');
+    state.feishuStatus = payload;
+    setFeishuStatusMeta(formatFeishuStatusText(payload), payload.connected ? '#1d9a6c' : '#c17b23');
+  } catch (err) {
+    setFeishuStatusMeta(`Failed to load Feishu status: ${String(err)}`, '#d92d20');
+  }
+}
+
+async function saveFeishuWebhook() {
+  const webhookUrl = String(els.feishuWebhookInput?.value || '').trim();
+  if (!webhookUrl) {
+    setFeishuStatusMeta('Enter a Feishu webhook URL before saving.', '#d92d20');
+    return;
+  }
+
+  try {
+    setFeishuStatusMeta('Saving Feishu webhook...', '#c17b23');
+    const payload = await api('/v0/integrations/feishu/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ webhook_url: webhookUrl })
+    });
+    state.feishuStatus = payload;
+    setFeishuStatusMeta(formatFeishuStatusText(payload), '#1d9a6c');
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+  } catch (err) {
+    setFeishuStatusMeta(`Failed to save webhook: ${String(err)}`, '#d92d20');
+  }
+}
+
+async function clearFeishuWebhook() {
+  try {
+    setFeishuStatusMeta('Clearing Feishu webhook...', '#c17b23');
+    const payload = await api('/v0/integrations/feishu/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ clear: true })
+    });
+    state.feishuStatus = payload;
+    if (els.feishuWebhookInput) {
+      els.feishuWebhookInput.value = '';
+    }
+    setFeishuStatusMeta(formatFeishuStatusText(payload), '#c17b23');
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+  } catch (err) {
+    setFeishuStatusMeta(`Failed to clear webhook: ${String(err)}`, '#d92d20');
+  }
+}
+
+function resolveLatestConnectorEvent(events = []) {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const item = events[i];
+    if (item?.name === 'connector.invoked' || item?.name === 'connector.invoke.failed') {
+      return item;
+    }
+  }
+  return null;
+}
+
+function resolveLatestActionExecutionEvent(events = []) {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const item = events[i];
+    if (item?.name === 'action.executed' || item?.name === 'action.executed.deduped') {
+      return item;
+    }
+  }
+  return null;
+}
+
+function readDeliveryModeFromEvent(event = null) {
+  if (!event || typeof event !== 'object') return '';
+  return String(
+    event?.payload?.output?.output?.delivery_mode
+    || event?.payload?.output?.delivery_mode
+    || event?.payload?.delivery_mode
+    || ''
+  ).trim();
+}
+
+async function refreshLatestExecutionEvidence() {
+  if (!els.latestExecutionEvidence) return;
+  if (!state.runs.length) {
+    els.latestExecutionEvidence.textContent = 'No run evidence yet.';
+    return;
+  }
+
+  const orderedRuns = [...state.runs].sort((a, b) => safeDateMs(b.started_at) - safeDateMs(a.started_at));
+  const targetRun = orderedRuns[0];
+
+  try {
+    const eventsPayload = await api(`/v0/runs/${targetRun.id}/events?limit=80&offset=0`);
+    const events = Array.isArray(eventsPayload?.items) ? eventsPayload.items : [];
+    const latestConnectorEvent = resolveLatestConnectorEvent(events);
+    const latestActionEvent = resolveLatestActionExecutionEvent(events);
+    const deliveryMode = readDeliveryModeFromEvent(latestConnectorEvent || latestActionEvent) || 'unknown';
+    const capability = String(
+      latestConnectorEvent?.payload?.capability
+      || latestActionEvent?.payload?.capability
+      || 'unknown'
+    );
+    const connectorId = String(
+      latestConnectorEvent?.payload?.connector_id
+      || latestActionEvent?.payload?.connector_id
+      || 'unknown'
+    );
+
+    const lines = [
+      `run_id: ${targetRun.id}`,
+      `run_status: ${targetRun.status}`,
+      `workspace: ${targetRun.workspace_id}`,
+      `latest_connector_event: ${latestConnectorEvent?.name || 'none'}`,
+      `latest_action_event: ${latestActionEvent?.name || 'none'}`,
+      `connector_id: ${connectorId}`,
+      `capability: ${capability}`,
+      `delivery_mode: ${deliveryMode}`
+    ];
+    if (latestConnectorEvent?.payload?.reason_code || latestActionEvent?.payload?.reason_code) {
+      lines.push(`reason_code: ${latestConnectorEvent?.payload?.reason_code || latestActionEvent?.payload?.reason_code}`);
+    }
+    els.latestExecutionEvidence.textContent = lines.join('\n');
+  } catch (err) {
+    els.latestExecutionEvidence.textContent = `Failed to load execution evidence: ${String(err)}`;
+  }
+}
+
+async function sendFeishuTestMessage() {
+  try {
+    setFeishuStatusMeta('Sending Feishu test message...', '#c17b23');
+    const payload = await api('/v0/integrations/feishu/test-message', {
+      method: 'POST',
+      body: JSON.stringify({
+        channel: 'flockmesh-onboarding',
+        content: 'FlockMesh onboarding test message'
+      })
+    });
+    state.feishuStatus = payload;
+    const ok = payload?.adapter_result?.output?.ok !== false;
+    const deliveryMode = String(payload?.adapter_result?.output?.delivery_mode || payload?.delivery_mode || 'unknown');
+    setFeishuStatusMeta(
+      ok
+        ? `Feishu test finished. delivery ${deliveryMode}.`
+        : `Feishu test returned non-ok. delivery ${deliveryMode}.`,
+      ok ? '#1d9a6c' : '#c17b23'
+    );
+    await refreshLatestExecutionEvidence();
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+  } catch (err) {
+    setFeishuStatusMeta(`Feishu test failed: ${String(err)}`, '#d92d20');
+  }
+}
+
+async function refreshStarterBridgeProfile() {
+  const snapshot = quickstartSetupSnapshot();
+
+  if (!snapshot.ready) {
+    state.starterBridgeProfile = null;
+    setStarterBridgeCommand('Set valid Workspace ID and Owner ID in Step 1 to generate command.', { disableCopy: true });
+    setStarterBridgeMeta(snapshot.errors[0] || 'Bridge command is generated from Step 1 inputs.', '#c17b23');
+    return;
+  }
+
+  const requestToken = ++starterBridgeRequestToken;
+  setStarterBridgeMeta('Preparing bridge command...', '#c17b23');
+
+  try {
+    const profile = await api(buildStarterBridgeProfilePath(snapshot));
+    if (requestToken !== starterBridgeRequestToken) return;
+
+    state.starterBridgeProfile = profile;
+    const command = buildStarterBridgeCommandFromProfile(profile) || buildStarterBridgeFallbackCommand(snapshot);
+    setStarterBridgeCommand(command);
+    setStarterBridgeMeta(
+      `Bridge ready for ${snapshot.workspaceId}. Run in a new terminal, then add this MCP server in Claude/Codex.`,
+      '#1d9a6c'
+    );
+  } catch {
+    if (requestToken !== starterBridgeRequestToken) return;
+
+    state.starterBridgeProfile = null;
+    setStarterBridgeCommand(buildStarterBridgeFallbackCommand(snapshot));
+    setStarterBridgeMeta('Bridge profile API unavailable. Showing fallback command.', '#c17b23');
+  }
+}
+
+function scheduleStarterBridgeProfileRefresh({ immediate = false } = {}) {
+  if (starterBridgeRefreshTimer) {
+    clearTimeout(starterBridgeRefreshTimer);
+    starterBridgeRefreshTimer = null;
+  }
+
+  if (immediate) {
+    void refreshStarterBridgeProfile();
+    return;
+  }
+
+  starterBridgeRefreshTimer = setTimeout(() => {
+    void refreshStarterBridgeProfile();
+  }, 200);
 }
 
 function focusQuickstartSetup() {
+  const snapshot = quickstartSetupSnapshot();
   els.quickstartSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  if (!String(els.quickstartWorkspaceInput.value || '').trim()) {
+  if (!snapshot.workspaceId || !QUICKSTART_WORKSPACE_ID_PATTERN.test(snapshot.workspaceId)) {
     els.quickstartWorkspaceInput.focus();
     return;
   }
-  if (!String(els.quickstartOwnerInput.value || '').trim()) {
+  if (!snapshot.ownerId || !QUICKSTART_OWNER_ID_PATTERN.test(snapshot.ownerId)) {
     els.quickstartOwnerInput.focus();
     return;
   }
@@ -505,7 +2037,8 @@ function focusQuickstartSetup() {
 }
 
 function updateJourneyState() {
-  const setupReady = quickstartSetupReady();
+  const setup = quickstartSetupSnapshot();
+  const setupReady = setup.ready;
   const hasRuns = state.runs.length > 0;
   const pendingCount = state.pendingApprovals.length;
 
@@ -535,13 +2068,16 @@ function updateJourneyState() {
   els.runLaunchSection.classList.toggle('mode-hidden', !isStarterMode || activeStep !== 2);
   els.runtimeFocusSection.classList.toggle('mode-hidden', !isStarterMode || activeStep !== 3);
 
-  const workspaceId = String(els.quickstartWorkspaceInput.value || '').trim() || '-';
-  const ownerId = String(els.quickstartOwnerInput.value || '').trim() || '-';
-  const templateId = selectedQuickstartTemplateId();
-  const template = ONE_PERSON_QUICKSTART_TEMPLATES[templateId];
+  const workspaceId = setup.workspaceId || '-';
+  const workspacePath = setup.workspacePath || '(not set)';
+  const ownerId = setup.ownerId || '-';
+  const template = ONE_PERSON_QUICKSTART_TEMPLATES[setup.templateId];
   const preset = selectedJourneyPreset();
-  els.runLaunchSummary.textContent = `Path ${preset.label} · Workspace ${workspaceId} · Owner ${ownerId} · Template ${template?.label || templateId}.`;
-  els.runLaunchTag.textContent = setupReady ? 'ready' : 'blocked';
+  els.runLaunchSummary.textContent =
+    `${preset.label} · ${setup.mode.toUpperCase()} · Workspace ${workspaceId} · Owner ${ownerId} · ` +
+    `Template ${template?.label || setup.templateId} · Folder ${workspacePath}.`;
+  els.runLaunchTag.textContent = setupReady ? 'ready' : 'fix step 1';
+  renderQuickstartGuideMeta(setup);
 
   els.journeyContinueToStartBtn.disabled = !setupReady;
   els.journeyStartRunBtn.disabled = !state.journeySetupConfirmed || !setupReady;
@@ -1411,7 +2947,7 @@ function buildBlueprintRequest() {
   return {
     workspace_id: String(els.blueprintWorkspaceInput.value || '').trim() || 'wsp_mindverse_cn',
     kit_id: els.blueprintKitSelect.value,
-    owners: owners.length ? owners : ['usr_yingapple'],
+    owners: owners.length ? owners : [currentUiActorId()],
     agent_name: String(els.blueprintAgentNameInput.value || '').trim() || 'Ops Blueprint Agent',
     selected_connector_ids: selectedConnectors.length ? selectedConnectors : undefined,
     policy_context: Object.keys(normalizedPolicyContext).length ? normalizedPolicyContext : undefined
@@ -2238,19 +3774,27 @@ function refreshRuntimeViews() {
   setRuntimeView(state.runtimeView);
   updateJourneyState();
   refreshTimelineRunSelect();
+  void refreshLatestExecutionEvidence();
 }
 
 async function startOnePersonQuickstart() {
   try {
-    setQuickstartTag('running', '#c17b23');
-    const templateId = selectedQuickstartTemplateId();
+    setQuickstartTag('starting', '#c17b23');
+    const setup = quickstartSetupSnapshot();
+    const templateId = setup.templateId;
     const idempotencyKey = String(els.quickstartIdemInput.value || '').trim();
+    if (setup.workspacePath) {
+      window.localStorage.setItem(WORKSPACE_PATH_STORAGE_KEY, setup.workspacePath);
+    } else {
+      window.localStorage.removeItem(WORKSPACE_PATH_STORAGE_KEY);
+    }
 
     const payload = await api('/v0/quickstart/one-person', {
       method: 'POST',
       body: JSON.stringify({
-        workspace_id: String(els.quickstartWorkspaceInput.value || '').trim() || 'wsp_mindverse_cn',
-        owner_id: String(els.quickstartOwnerInput.value || '').trim() || 'usr_yingapple',
+        workspace_id: setup.workspaceId || 'wsp_mindverse_cn',
+        ...(setup.workspacePath ? { workspace_path: setup.workspacePath } : {}),
+        owner_id: setup.ownerId || currentUiActorId(),
         template_id: templateId,
         connector_ids: effectiveQuickstartConnectorIds(),
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {})
@@ -2259,15 +3803,30 @@ async function startOnePersonQuickstart() {
 
     state.quickstartResult = payload;
     els.quickstartPayload.textContent = JSON.stringify(payload, null, 2);
-    els.quickstartMeta.textContent = `${payload.reused ? 'reused' : 'created'} · agent ${payload.created_agent.id} · run ${payload.run.id} · status ${payload.run.status}`;
-    setQuickstartTag(payload.reused ? 'reused' : 'completed', '#1d9a6c');
+    els.quickstartMeta.textContent =
+      `Run ${payload.run.id} ${payload.reused ? 'reused' : 'started'} (status: ${payload.run.status}). ` +
+      `Agent ${payload.created_agent.id}. Next: review Step 3 approvals and sessions.`;
+    setQuickstartTag(payload.reused ? 'reused' : 'started', '#1d9a6c');
 
     state.selectedRunId = payload.run.id;
     await Promise.all([
       syncState(),
       loadConnectorGovernance()
     ]);
+    await loadFeishuStatus();
+    await Promise.all([
+      loadEnvironmentSets(),
+      loadAccessPermissions(),
+      loadRoleBindings(),
+      loadSessions()
+    ]);
+    await loadEffectiveEnvironment();
+    await loadStarterReadiness({ quiet: true });
+    if (state.sessions.length) {
+      await loadSelectedSessionDetail();
+    }
     refreshRuntimeViews();
+    setUiMode('starter');
     openRuntimeReview();
     await refreshTimelineForSelectedRun();
 
@@ -2279,19 +3838,21 @@ async function startOnePersonQuickstart() {
     });
   } catch (err) {
     setQuickstartTag('error', '#d92d20');
-    els.quickstartMeta.textContent = String(err);
+    els.quickstartMeta.textContent = `Start run failed: ${String(err)}`;
     els.quickstartPayload.textContent = String(err);
     logAction('quickstart:error', String(err));
   }
 }
 
 async function createAgent() {
+  const actorId = currentUiActorId();
+  const workspaceId = currentWorkspaceId() || 'wsp_mindverse_cn';
   const payload = await api('/v0/agents', {
     method: 'POST',
     body: JSON.stringify({
-      workspace_id: 'wsp_mindverse_cn',
+      workspace_id: workspaceId,
       role: 'ops_assistant',
-      owners: ['usr_yingapple'],
+      owners: [actorId],
       name: 'Ops Assistant',
       default_policy_profile: 'polprof_ops_standard'
     })
@@ -2304,10 +3865,11 @@ async function createAgent() {
 }
 
 async function createBinding(agentId) {
+  const workspaceId = currentWorkspaceId() || 'wsp_mindverse_cn';
   const payload = await api('/v0/connectors/bindings', {
     method: 'POST',
     body: JSON.stringify({
-      workspace_id: 'wsp_mindverse_cn',
+      workspace_id: workspaceId,
       agent_id: agentId,
       connector_id: DEMO_BOOTSTRAP_PRESET.connector_id,
       scopes: DEMO_BOOTSTRAP_PRESET.scopes,
@@ -2324,16 +3886,18 @@ async function createBinding(agentId) {
 }
 
 async function createRun(agentId) {
+  const actorId = currentUiActorId();
+  const workspaceId = currentWorkspaceId() || 'wsp_mindverse_cn';
   const payload = await api('/v0/runs', {
     method: 'POST',
     body: JSON.stringify({
-      workspace_id: 'wsp_mindverse_cn',
+      workspace_id: workspaceId,
       agent_id: agentId,
       playbook_id: 'pbk_weekly_ops_sync',
       trigger: {
         type: 'manual',
         source: DEMO_BOOTSTRAP_PRESET.trigger_source,
-        actor_id: 'usr_yingapple',
+        actor_id: actorId,
         at: new Date().toISOString()
       }
     })
@@ -2353,12 +3917,13 @@ async function resolveRunApproval(run, approved, actionIntentId = null) {
   if (!targetActionIntentId) return;
 
   try {
+    const actorId = currentUiActorId();
     const result = await api(`/v0/runs/${run.id}/approvals`, {
       method: 'POST',
       body: JSON.stringify({
         action_intent_id: targetActionIntentId,
         approved,
-        approved_by: 'usr_yingapple',
+        approved_by: actorId,
         expected_revision: run.revision,
         note: approved ? 'approved from control panel' : 'rejected from control panel'
       })
@@ -2376,10 +3941,11 @@ async function resolveRunApproval(run, approved, actionIntentId = null) {
 
 async function resolveRunCancel(run) {
   try {
+    const actorId = currentUiActorId();
     const result = await api(`/v0/runs/${run.id}/cancel`, {
       method: 'POST',
       body: JSON.stringify({
-        cancelled_by: 'usr_yingapple',
+        cancelled_by: actorId,
         expected_revision: run.revision,
         reason: 'cancelled from control panel'
       })
@@ -2464,11 +4030,183 @@ els.journeyReviewBtn.addEventListener('click', () => {
 els.quickstartStartBtn.addEventListener('click', async () => {
   await startOnePersonQuickstart();
 });
+els.starterBridgeCopyBtn.addEventListener('click', async () => {
+  const command = String(els.starterBridgeCommand.textContent || '').trim();
+  if (!command) return;
+
+  try {
+    const copied = await copyTextToClipboard(command);
+    setStarterBridgeMeta(copied ? 'Command copied. Paste it in a new terminal.' : 'Clipboard unavailable. Copy command manually.', copied ? '#1d9a6c' : '#c17b23');
+  } catch {
+    setStarterBridgeMeta('Clipboard unavailable. Copy command manually.', '#c17b23');
+  }
+});
+els.starterBridgeProfileBtn.addEventListener('click', () => {
+  const profilePath = buildStarterBridgeProfilePath(quickstartSetupSnapshot());
+  window.open(profilePath, '_blank', 'noopener,noreferrer');
+});
+els.starterReadinessRefreshBtn.addEventListener('click', async () => {
+  await loadStarterReadiness({
+    includeProbe: Boolean(els.starterReadinessProbeInput?.checked),
+    quiet: false
+  });
+});
+els.starterReadinessProbeInput.addEventListener('change', () => {
+  if (els.starterReadinessProbeInput?.checked) {
+    setStarterReadinessMeta('Connectivity probe enabled. Refresh readiness to run outbound checks.', '#c17b23');
+  } else {
+    setStarterReadinessMeta('Connectivity probe disabled. Refresh readiness for syntax-only checks.', '#5f6b7f');
+  }
+});
+els.feishuWebhookSaveBtn.addEventListener('click', async () => {
+  await saveFeishuWebhook();
+});
+els.feishuWebhookClearBtn.addEventListener('click', async () => {
+  await clearFeishuWebhook();
+});
+els.feishuWebhookTestBtn.addEventListener('click', async () => {
+  await sendFeishuTestMessage();
+});
+els.envSetCreateBtn.addEventListener('click', async () => {
+  await createEnvironmentSet();
+});
+els.envSetCreateApplyBtn.addEventListener('click', async () => {
+  await createActivateApplyEnvironmentSet();
+});
+els.envSetRefreshBtn.addEventListener('click', async () => {
+  await loadEnvironmentSets();
+});
+els.envSetVerifyBtn.addEventListener('click', async () => {
+  await verifySelectedEnvironmentSet();
+});
+els.envSetVerifyModeSelect.addEventListener('change', () => {
+  const mode = String(els.envSetVerifyModeSelect.value || 'syntax').trim();
+  if (mode === 'connectivity') {
+    setEnvironmentMeta('Verify mode connectivity will probe external endpoints.', '#c17b23');
+  } else {
+    setEnvironmentMeta('Verify mode syntax checks key format without outbound probe.', '#5f6b7f');
+  }
+});
+els.envSetVerifyTimeoutInput.addEventListener('change', () => {
+  const raw = Number(els.envSetVerifyTimeoutInput.value || 4000);
+  const next = Number.isFinite(raw) ? Math.min(Math.max(Math.round(raw), 500), 10000) : 4000;
+  els.envSetVerifyTimeoutInput.value = String(next);
+});
+els.envSetActivateBtn.addEventListener('click', async () => {
+  await activateSelectedEnvironmentSet();
+});
+els.envSetApplyRuntimeBtn.addEventListener('click', async () => {
+  await applySelectedEnvironmentSetRuntime();
+});
+els.envSetSelect.addEventListener('change', () => {
+  state.selectedEnvironmentSetId = String(els.envSetSelect.value || '').trim();
+  state.environmentVerification = null;
+  renderEnvironmentVerificationSummary(null);
+  const selected = state.environmentSets.find((item) => item.id === state.selectedEnvironmentSetId);
+  if (selected) {
+    els.envSetPayload.textContent = JSON.stringify(selected, null, 2);
+  }
+});
+els.accessPermissionsRefreshBtn.addEventListener('click', async () => {
+  await loadAccessPermissions();
+});
+els.roleBindingGrantBtn.addEventListener('click', async () => {
+  await grantRoleBinding();
+});
+els.roleBindingRefreshBtn.addEventListener('click', async () => {
+  await Promise.all([
+    loadRoleBindings(),
+    loadAccessPermissions(),
+    loadEffectiveEnvironment()
+  ]);
+});
+els.effectiveEnvLoadBtn.addEventListener('click', async () => {
+  await loadEffectiveEnvironment();
+});
+els.effectiveEnvActorInput.addEventListener('change', async () => {
+  await loadEffectiveEnvironment();
+});
+els.effectiveEnvModeSelect.addEventListener('change', async () => {
+  await loadEffectiveEnvironment();
+});
+els.effectiveEnvIncludeValuesInput.addEventListener('change', async () => {
+  await loadEffectiveEnvironment();
+});
+els.sessionRefreshBtn.addEventListener('click', async () => {
+  await loadSessions();
+});
+els.sessionFilterActorInput.addEventListener('change', async () => {
+  await loadSessions();
+});
+els.sessionFilterStatusSelect.addEventListener('change', async () => {
+  await loadSessions();
+});
+els.sessionSelect.addEventListener('change', () => {
+  state.selectedSessionId = String(els.sessionSelect.value || '').trim();
+  renderSessionList();
+});
+els.sessionLoadDetailBtn.addEventListener('click', async () => {
+  await loadSelectedSessionDetail();
+});
+els.openApprovalInboxBtn.addEventListener('click', () => {
+  setUiMode('starter');
+  state.journeySetupConfirmed = true;
+  setRuntimeView('approvals');
+  openRuntimeReview();
+});
+els.runtimeOpenWorkbenchBtn.addEventListener('click', () => {
+  setUiMode('advanced');
+  openPrimaryWorkbenchGroup();
+  document.getElementById('advancedWorkbenchPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 els.quickstartWorkspaceInput.addEventListener('input', () => {
   updateJourneyState();
+  scheduleStarterBridgeProfileRefresh();
+  scheduleStarterReadinessRefresh();
+  scheduleWorkspaceContextRefresh();
+});
+els.quickstartWorkspacePathInput.addEventListener('input', () => {
+  const value = String(els.quickstartWorkspacePathInput.value || '').trim();
+  if (value) {
+    window.localStorage.setItem(WORKSPACE_PATH_STORAGE_KEY, value);
+  } else {
+    window.localStorage.removeItem(WORKSPACE_PATH_STORAGE_KEY);
+  }
+  updateJourneyState();
+  scheduleStarterBridgeProfileRefresh();
+  scheduleStarterReadinessRefresh();
+});
+els.quickstartWorkspacePathDefaultBtn.addEventListener('click', async () => {
+  try {
+    const profile = await api(buildStarterBridgeProfilePath(quickstartSetupSnapshot()));
+    const cwd = String(profile?.mcp_bridge?.cwd || '').trim();
+    if (!cwd) {
+      setStarterBridgeMeta('Runtime root is unavailable from profile response.', '#c17b23');
+      return;
+    }
+    els.quickstartWorkspacePathInput.value = cwd;
+    window.localStorage.setItem(WORKSPACE_PATH_STORAGE_KEY, cwd);
+    updateJourneyState();
+    scheduleStarterBridgeProfileRefresh({ immediate: true });
+    scheduleStarterReadinessRefresh({ immediate: true, quiet: true });
+    setStarterBridgeMeta(`Workspace folder set to runtime root: ${cwd}`, '#1d9a6c');
+  } catch (err) {
+    setStarterBridgeMeta(`Failed to load runtime root: ${String(err)}`, '#d92d20');
+  }
 });
 els.quickstartOwnerInput.addEventListener('input', () => {
+  if (els.effectiveEnvActorInput && !String(els.effectiveEnvActorInput.value || '').trim()) {
+    els.effectiveEnvActorInput.value = String(els.quickstartOwnerInput.value || '').trim();
+  }
   updateJourneyState();
+  scheduleStarterBridgeProfileRefresh();
+  scheduleStarterReadinessRefresh();
+  scheduleWorkspaceContextRefresh();
+});
+els.quickstartModeSelect.addEventListener('change', () => {
+  updateJourneyState();
+  scheduleStarterReadinessRefresh();
+  scheduleWorkspaceContextRefresh();
 });
 els.quickstartTemplateSelect.addEventListener('change', () => {
   if (!parseCsvUnique(els.quickstartConnectorIdsInput.value).length) {
@@ -2478,9 +4216,10 @@ els.quickstartTemplateSelect.addEventListener('change', () => {
   if (!state.quickstartResult) {
     const templateId = selectedQuickstartTemplateId();
     const template = ONE_PERSON_QUICKSTART_TEMPLATES[templateId];
-    els.quickstartMeta.textContent = `Template ${template?.label || templateId} selected. Click Continue To Step 2.`;
+    els.quickstartMeta.textContent = `Template ${template?.label || templateId} selected. Continue to Step 2 when ready.`;
   }
   updateJourneyState();
+  scheduleStarterReadinessRefresh();
 });
 els.blueprintReloadBtn.addEventListener('click', async () => {
   await loadAgentKits();
@@ -2658,10 +4397,20 @@ els.refreshBtn.addEventListener('click', async () => {
       loadHealth(),
       syncState(),
       loadConnectorGovernance(),
+      loadFeishuStatus(),
+      loadEnvironmentSets(),
+      loadAccessPermissions(),
+      loadRoleBindings(),
+      loadEffectiveEnvironment(),
+      loadSessions(),
+      loadStarterReadiness({ quiet: true }),
       loadReplayDriftSummary(),
       loadAgentKits(),
       loadPolicyProfiles()
     ]);
+    if (state.sessions.length) {
+      await loadSelectedSessionDetail();
+    }
     refreshRuntimeViews();
     await refreshTimelineForSelectedRun();
   } catch (err) {
@@ -2768,6 +4517,8 @@ if (!parseCsvUnique(els.quickstartConnectorIdsInput.value).length) {
 }
 
 try {
+  renderEnvironmentProviderCards();
+  syncAccessDrivenControls();
   setupWorkbenchDisclosure();
   setRuntimeView('approvals');
   setWorkbenchSection('agent');
@@ -2776,16 +4527,31 @@ try {
     openPrimaryWorkbenchGroup();
   }
   applyJourneyPreset(state.journeyPresetId, { focus: false, enforceStarterMode: false });
+  const initialWorkspacePath = readInitialWorkspacePath();
+  if (initialWorkspacePath) {
+    els.quickstartWorkspacePathInput.value = initialWorkspacePath;
+  }
   setCompactMode(readInitialCompactMode(), { persist: false });
   updateJourneyState();
+  scheduleStarterBridgeProfileRefresh({ immediate: true });
   await Promise.all([
     loadHealth(),
     syncState(),
     loadConnectorGovernance(),
+    loadFeishuStatus(),
+    loadEnvironmentSets(),
+    loadAccessPermissions(),
+    loadRoleBindings(),
+    loadEffectiveEnvironment(),
+    loadSessions(),
+    loadStarterReadiness({ quiet: true }),
     loadReplayDriftSummary(),
     loadAgentKits(),
     loadPolicyProfiles()
   ]);
+  if (state.sessions.length) {
+    await loadSelectedSessionDetail();
+  }
   refreshRuntimeViews();
   await refreshTimelineForSelectedRun();
 } catch (err) {

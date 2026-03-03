@@ -22,50 +22,50 @@
           <div class="hero-main">
             <p class="eyebrow">FlockMesh v0</p>
             <h1>
-              Agent-native office runtime,
-              <span>rooted in today, built for tomorrow.</span>
+              From zero to first agent run,
+              <span>in three clear steps.</span>
             </h1>
             <p class="subtitle">
-              Policy-first execution, optional ecosystem connectors, immutable audit.
+              Set identity, grant environment access, run, then review every decision.
             </p>
             <div class="hero-actions">
-              <button id="heroStartQuickstartBtn" class="btn btn-primary" data-ui-mode="starter">Start First Run</button>
+              <button id="heroStartQuickstartBtn" class="btn btn-primary" data-ui-mode="starter">Get Started</button>
             </div>
             <p class="hero-helper">
-              New here? Follow 3 steps: Configure, Start, Review. One main action at a time.
+              Required only: <code>Workspace ID</code>, <code>Owner ID</code>, and <code>Template</code>.
             </p>
             <details class="advanced-tools-details progressive-disclosure hero-disclosure">
-              <summary>View additional options</summary>
+              <summary>More controls</summary>
               <div class="timeline-controls">
-                <button id="advancedModeBtn" class="btn btn-ghost">Open Workbench</button>
+                <button id="advancedModeBtn" class="btn btn-ghost">Open Full Workstation</button>
                 <button id="refreshBtn" class="btn btn-ghost">Refresh State</button>
-                <button id="starterModeBtn" class="btn btn-ghost">Back To Focus</button>
+                <button id="starterModeBtn" class="btn btn-ghost">Back To Guided Flow</button>
                 <button id="compactToggleBtn" class="btn btn-ghost">Compact: Off</button>
               </div>
             </details>
           </div>
           <aside class="hero-paths" data-ui-mode="starter">
             <div class="hero-paths-head">
-              <h2>Pick A Path</h2>
+              <h2>Choose Setup</h2>
               <span id="journeyPresetTag" class="tag">recommended: opc</span>
             </div>
-            <p class="run-meta">One click presets Step 1 only. The flow remains strict: 1 -> 2 -> 3.</p>
+            <p class="run-meta">Presets only prefill Step 1. You can edit everything.</p>
             <article class="hero-path-card">
-              <h3>Startup Team Path</h3>
-              <p>Multi-member collaboration with incident-ready runtime and governance setup.</p>
-              <button id="heroStartupPathBtn" class="btn btn-secondary">Use Startup Team Path</button>
+              <h3>Team Setup</h3>
+              <p>Organization mode with role-based access and audit workflows.</p>
+              <button id="heroStartupPathBtn" class="btn btn-secondary">Use Team Setup</button>
             </article>
             <article class="hero-path-card">
-              <h3>OPC Path</h3>
-              <p>Solo execution with fast weekly-ops activation and low maintenance overhead.</p>
-              <button id="heroOpcPathBtn" class="btn btn-ghost">Use OPC Path</button>
+              <h3>Solo Setup</h3>
+              <p>OPC mode for one operator to launch fast and keep overhead low.</p>
+              <button id="heroOpcPathBtn" class="btn btn-ghost">Use Solo Setup</button>
             </article>
             <div class="hero-path-preview">
-              <h3>What Happens Next</h3>
+              <h3>3 Steps</h3>
               <ol>
-                <li>Step 1: Review auto-filled setup fields.</li>
-                <li>Step 2: Confirm and launch your first run.</li>
-                <li>Step 3: Resolve pending approvals or monitor runs.</li>
+                <li>Step 1: Confirm setup and environment access.</li>
+                <li>Step 2: Check readiness and start run.</li>
+                <li>Step 3: Approve, monitor, and audit sessions.</li>
               </ol>
             </div>
           </aside>
@@ -74,24 +74,24 @@
 
       <section class="panel reveal journey-panel" data-ui-mode="starter">
         <div class="panel-head">
-          <h2>Start Here</h2>
+          <h2>Guided Onboarding</h2>
           <span id="journeyTag" class="tag">step 1/3</span>
         </div>
         <div class="journey-grid">
           <article id="journeyStepSetup" class="journey-step is-active">
             <div class="journey-head">
-              <h3>1. Configure</h3>
+              <h3>1. Setup</h3>
               <span id="journeySetupStatus" class="tag">required</span>
             </div>
-            <p class="run-meta">Set workspace, owner, and template.</p>
-            <button id="journeyGoSetupBtn" class="btn btn-secondary">Go To Setup</button>
+            <p class="run-meta">Pick workspace, owner, mode, and first-run template.</p>
+            <button id="journeyGoSetupBtn" class="btn btn-secondary">Open Step 1</button>
           </article>
           <article id="journeyStepRun" class="journey-step mode-hidden">
             <div class="journey-head">
-              <h3>2. Start</h3>
+              <h3>2. Launch</h3>
               <span id="journeyRunStatus" class="tag">next</span>
             </div>
-            <p class="run-meta">Confirm setup, then open launch panel.</p>
+            <p class="run-meta">Check readiness. Optionally connect Claude Code/Codex. Start run.</p>
             <button id="journeyStartRunBtn" class="btn btn-secondary">Open Step 2</button>
           </article>
           <article id="journeyStepReview" class="journey-step mode-hidden">
@@ -99,39 +99,65 @@
               <h3>3. Review</h3>
               <span id="journeyReviewStatus" class="tag">locked</span>
             </div>
-            <p class="run-meta">Check pending decisions or run status.</p>
-            <button id="journeyReviewBtn" class="btn btn-ghost">Open Runtime Focus</button>
+            <p class="run-meta">Use approvals, runs, and session audit as your daily workstation.</p>
+            <button id="journeyReviewBtn" class="btn btn-ghost">Open Step 3</button>
           </article>
         </div>
       </section>
 
       <section class="panel reveal" id="quickstartSection" data-ui-mode="starter">
         <div class="panel-head">
-          <h2>Step 1 · Quickstart Setup</h2>
-          <span id="quickstartTag" class="tag">ready</span>
+          <h2>Step 1 · Setup</h2>
+          <span id="quickstartTag" class="tag">waiting input</span>
         </div>
         <div class="timeline-controls quickstart-primary">
-          <label for="quickstartWorkspaceInput" class="timeline-label">Workspace</label>
+          <label for="quickstartWorkspaceInput" class="timeline-label">Workspace ID</label>
           <input id="quickstartWorkspaceInput" class="timeline-input" value="wsp_mindverse_cn" />
-          <label for="quickstartOwnerInput" class="timeline-label">Owner</label>
+          <label for="quickstartWorkspacePathInput" class="timeline-label">Workspace Folder</label>
+          <input
+            id="quickstartWorkspacePathInput"
+            class="timeline-input"
+            placeholder="/Users/you/your-project (optional, for IDE bridge)"
+          />
+          <button id="quickstartWorkspacePathDefaultBtn" class="btn btn-ghost">Use Runtime Root</button>
+          <label for="quickstartOwnerInput" class="timeline-label">Owner ID (actor)</label>
           <input id="quickstartOwnerInput" class="timeline-input" value="usr_yingapple" />
           <label for="quickstartTemplateSelect" class="timeline-label">Template</label>
           <select id="quickstartTemplateSelect" class="timeline-select">
             <option value="weekly_ops_sync">Weekly Ops Sync</option>
             <option value="incident_response">Incident Response</option>
           </select>
-          <button id="journeyContinueToStartBtn" class="btn btn-secondary">Continue To Step 2</button>
+          <label for="quickstartModeSelect" class="timeline-label">Mode</label>
+          <select id="quickstartModeSelect" class="timeline-select">
+            <option value="opc">OPC</option>
+            <option value="organization">Organization</option>
+          </select>
+          <button id="journeyContinueToStartBtn" class="btn btn-secondary">Continue to Step 2</button>
         </div>
+        <section class="starter-guide">
+          <h3>Required Inputs</h3>
+          <ul>
+            <li><code>Workspace ID</code>: tenant boundary (all agents/runs stay inside this workspace).</li>
+            <li><code>Owner ID</code>: actor who starts runs and handles approvals.</li>
+            <li><code>Template</code>: your first scenario (you can switch later).</li>
+            <li><code>Workspace Folder</code>: optional, needed only for Claude Code/Codex local file operations.</li>
+          </ul>
+          <p class="run-meta">
+            Suggested format: workspace like <code>wsp_team_alpha</code>, owner like
+            <code>usr_alice_ops</code>.
+          </p>
+          <p id="quickstartGuideMeta" class="run-meta">Fill required inputs, then continue.</p>
+        </section>
         <details class="advanced-tools-details progressive-disclosure">
-          <summary>Optional setup</summary>
+          <summary>Advanced (optional)</summary>
           <div class="timeline-controls">
-            <label for="quickstartConnectorIdsInput" class="timeline-label">Connectors (Optional)</label>
+            <label for="quickstartConnectorIdsInput" class="timeline-label">Connector IDs (optional)</label>
             <input
               id="quickstartConnectorIdsInput"
               class="timeline-input"
               placeholder="con_feishu_official, con_mcp_gateway"
             />
-            <label for="quickstartIdemInput" class="timeline-label">Idempotency</label>
+            <label for="quickstartIdemInput" class="timeline-label">Idempotency key (optional)</label>
             <input
               id="quickstartIdemInput"
               class="timeline-input"
@@ -139,37 +165,156 @@
             />
           </div>
         </details>
+        <section class="starter-guide">
+          <h3>Environment Access</h3>
+          <p class="run-meta">
+            Define what agents can use: cloud credentials, Langfuse, Feishu, and Claude/Codex keys.
+            Fast path: insert template keys, paste real values, then click <code>Create + Apply Runtime</code>.
+          </p>
+          <div id="envProviderCards" class="env-provider-grid"></div>
+          <p id="envTemplateMeta" class="run-meta">Select provider cards to insert key templates.</p>
+          <div class="timeline-controls">
+            <label for="envTemplateTargetInput" class="timeline-label">Target (optional)</label>
+            <input id="envTemplateTargetInput" class="timeline-input" placeholder="role:operator or actor:usr_alice_ops" />
+            <label for="envSetNameInput" class="timeline-label">Environment Set Name</label>
+            <input id="envSetNameInput" class="timeline-input" placeholder="env_ops_default" />
+            <label for="envSetScopeSelect" class="timeline-label">Scope</label>
+            <select id="envSetScopeSelect" class="timeline-select">
+              <option value="workspace">workspace</option>
+              <option value="opc">opc</option>
+              <option value="org">org</option>
+              <option value="agent">agent</option>
+            </select>
+            <label for="envSetEntriesInput" class="timeline-label">Entries</label>
+            <textarea
+              id="envSetEntriesInput"
+              class="timeline-textarea"
+              rows="4"
+              placeholder="provider key value [visibility] [target]\nfeishu FLOCKMESH_FEISHU_WEBHOOK_URL https://...\nlangfuse LANGFUSE_PUBLIC_KEY pk_xxx secret"
+            ></textarea>
+            <button id="envSetCreateBtn" class="btn btn-ghost">Create Draft</button>
+            <button id="envSetCreateApplyBtn" class="btn btn-ghost">Create + Apply Runtime</button>
+            <button id="envSetRefreshBtn" class="btn btn-ghost">Refresh List</button>
+          </div>
+          <div class="timeline-controls">
+            <label for="envSetSelect" class="timeline-label">Env Set</label>
+            <select id="envSetSelect" class="timeline-select"></select>
+            <label for="envSetVerifyModeSelect" class="timeline-label">Verify Mode</label>
+            <select id="envSetVerifyModeSelect" class="timeline-select">
+              <option value="syntax">syntax (local check)</option>
+              <option value="connectivity">connectivity (network check)</option>
+            </select>
+            <label for="envSetVerifyTimeoutInput" class="timeline-label">Timeout ms</label>
+            <input id="envSetVerifyTimeoutInput" class="timeline-input timeline-input-sm" value="4000" />
+            <button id="envSetVerifyBtn" class="btn btn-ghost">Verify</button>
+            <button id="envSetActivateBtn" class="btn btn-ghost">Set Active</button>
+            <button id="envSetApplyRuntimeBtn" class="btn btn-ghost">Apply To Runtime</button>
+          </div>
+          <p class="run-meta">
+            Entry format: <code>provider key value [visibility] [target]</code>. Target can be
+            <code>role:workspace_admin</code> or <code>actor:usr_alice_ops</code>.
+          </p>
+          <p id="envSetMeta" class="run-meta">No environment sets yet.</p>
+          <div id="envVerifySummary" class="env-verify-list"></div>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>View environment payload</summary>
+            <pre id="envSetPayload" class="code-box">No environment set payload.</pre>
+          </details>
+        </section>
         <p id="quickstartMeta" class="run-meta">
-          3 fields only: workspace, owner, template.
+          Fill required inputs, then continue to Step 2.
         </p>
         <details class="advanced-tools-details progressive-disclosure">
-          <summary>View quickstart payload</summary>
+          <summary>View quickstart request/response</summary>
           <pre id="quickstartPayload" class="code-box">No quickstart run yet.</pre>
         </details>
       </section>
 
       <section class="panel reveal mode-hidden" id="runLaunchSection" data-ui-mode="starter">
         <div class="panel-head">
-          <h2>Step 2 · Launch First Run</h2>
+          <h2>Step 2 · Check & Launch</h2>
           <span id="runLaunchTag" class="tag">ready</span>
         </div>
         <p id="runLaunchSummary" class="run-meta">
-          Confirm setup details, then launch your first run.
+          Check readiness first, then start your run.
         </p>
+        <section class="starter-bridge-guide">
+          <div class="panel-head panel-head-tight">
+            <h3>Run Readiness</h3>
+            <span id="starterReadinessTag" class="tag">checking...</span>
+          </div>
+          <p class="run-meta">
+            Green = ready. Yellow = can run but incomplete. Red = blocked.
+          </p>
+          <div class="timeline-controls">
+            <label for="starterReadinessProbeInput" class="timeline-label">Connectivity Probe</label>
+            <input id="starterReadinessProbeInput" class="timeline-checkbox" type="checkbox" />
+            <button id="starterReadinessRefreshBtn" class="btn btn-ghost">Re-check</button>
+          </div>
+          <p id="starterReadinessMeta" class="run-meta">Waiting for readiness check.</p>
+          <div id="starterReadinessStageList" class="readiness-stage-grid"></div>
+          <div class="readiness-actions-wrap">
+            <h4>Recommended Next Actions</h4>
+            <div id="starterReadinessActionList" class="readiness-action-list"></div>
+          </div>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>View readiness payload</summary>
+            <pre id="starterReadinessPayload" class="code-box">No readiness payload.</pre>
+          </details>
+        </section>
+        <section class="starter-bridge-guide">
+          <h3>IDE Agent Bridge (Optional)</h3>
+          <p class="run-meta">
+            Use this only when Claude Code/Codex should operate on your local workspace folder.
+          </p>
+          <pre id="starterBridgeCommand" class="code-box">Set valid Workspace ID and Owner ID in Step 1 to generate command.</pre>
+          <div class="timeline-controls">
+            <button id="starterBridgeCopyBtn" class="btn btn-ghost" disabled>Copy Command</button>
+            <button id="starterBridgeProfileBtn" class="btn btn-ghost">Open Bridge Profile</button>
+          </div>
+          <p id="starterBridgeMeta" class="run-meta">Bridge command is generated from Step 1 inputs.</p>
+        </section>
+        <section class="starter-bridge-guide">
+          <h3>Delivery & Approvals</h3>
+          <p class="run-meta">
+            Feishu webhook is optional. You can still test in stub mode without external delivery.
+          </p>
+          <div class="timeline-controls">
+            <label for="feishuWebhookInput" class="timeline-label">Feishu Webhook URL (optional)</label>
+            <input
+              id="feishuWebhookInput"
+              class="timeline-input"
+              placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
+            />
+            <button id="feishuWebhookSaveBtn" class="btn btn-ghost">Save Feishu Webhook</button>
+            <button id="feishuWebhookClearBtn" class="btn btn-ghost">Clear Feishu Webhook</button>
+            <button id="feishuWebhookTestBtn" class="btn btn-ghost">Send Feishu Test</button>
+            <button id="openApprovalInboxBtn" class="btn btn-secondary">Open Approvals</button>
+          </div>
+          <p id="feishuStatusMeta" class="run-meta">Loading Feishu status...</p>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>Latest execution evidence</summary>
+            <pre id="latestExecutionEvidence" class="code-box">No run evidence yet.</pre>
+          </details>
+        </section>
         <div class="timeline-controls">
-          <button id="journeyBackToSetupBtn" class="btn btn-ghost">Back To Step 1</button>
+          <button id="journeyBackToSetupBtn" class="btn btn-ghost">Back to Step 1</button>
           <button id="quickstartStartBtn" class="btn btn-secondary">Start Run</button>
         </div>
       </section>
 
       <section class="panel reveal mode-hidden" id="runtimeFocusSection" data-ui-mode="starter">
         <div class="panel-head">
-          <h2>Step 3 · Runtime Focus</h2>
-          <span id="runtimeFocusTag" class="tag">pending decisions</span>
+          <h2>Step 3 · Workstation</h2>
+          <span id="runtimeFocusTag" class="tag">approvals first</span>
+        </div>
+        <p class="run-meta">This is your daily runtime view: approvals, runs, access control, and session audit.</p>
+        <div class="timeline-controls">
+          <button id="runtimeOpenWorkbenchBtn" class="btn btn-ghost">Open Full Workstation</button>
         </div>
         <div class="mode-tabs">
-          <button id="runtimeViewApprovalsBtn" class="btn btn-secondary is-active">Pending Decisions</button>
-          <button id="runtimeViewRunsBtn" class="btn btn-ghost">Active Runs</button>
+          <button id="runtimeViewApprovalsBtn" class="btn btn-secondary is-active">Approvals</button>
+          <button id="runtimeViewRunsBtn" class="btn btn-ghost">Runs</button>
         </div>
         <div id="runtimeApprovalsPane">
           <div class="panel-head panel-head-tight">
@@ -185,15 +330,92 @@
           </div>
           <div id="runFeed" class="run-feed"></div>
         </div>
+        <section class="starter-guide">
+          <h3>Admin & Audit</h3>
+          <div class="timeline-controls">
+            <button id="accessPermissionsRefreshBtn" class="btn btn-ghost">Refresh My Access</button>
+          </div>
+          <p id="accessPermissionsMeta" class="run-meta">No access snapshot loaded.</p>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>View access payload</summary>
+            <pre id="accessPermissionsPayload" class="code-box">No access payload.</pre>
+          </details>
+          <div class="timeline-controls">
+            <label for="roleBindingActorInput" class="timeline-label">Grant Actor ID</label>
+            <input id="roleBindingActorInput" class="timeline-input" placeholder="usr_ops_admin" />
+            <label for="roleBindingRoleSelect" class="timeline-label">Role</label>
+            <select id="roleBindingRoleSelect" class="timeline-select">
+              <option value="workspace_admin">workspace_admin</option>
+              <option value="operator">operator</option>
+              <option value="auditor">auditor</option>
+              <option value="org_admin">org_admin</option>
+            </select>
+            <button id="roleBindingGrantBtn" class="btn btn-ghost">Grant Role</button>
+            <button id="roleBindingRefreshBtn" class="btn btn-ghost">Refresh Roles</button>
+          </div>
+          <p id="roleBindingMeta" class="run-meta">No role bindings loaded.</p>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>View role bindings payload</summary>
+            <pre id="roleBindingPayload" class="code-box">No role bindings payload.</pre>
+          </details>
+          <div class="timeline-controls">
+            <label for="effectiveEnvActorInput" class="timeline-label">Preview Actor ID</label>
+            <input id="effectiveEnvActorInput" class="timeline-input" placeholder="usr_ops_admin" />
+            <label for="effectiveEnvModeSelect" class="timeline-label">Mode</label>
+            <select id="effectiveEnvModeSelect" class="timeline-select">
+              <option value="all">all</option>
+              <option value="opc">opc</option>
+              <option value="organization">organization</option>
+            </select>
+            <label for="effectiveEnvIncludeValuesInput" class="timeline-label">Include plain values</label>
+            <input id="effectiveEnvIncludeValuesInput" class="timeline-checkbox" type="checkbox" />
+            <button id="effectiveEnvLoadBtn" class="btn btn-ghost">Preview Access</button>
+          </div>
+          <p id="effectiveEnvMeta" class="run-meta">No effective environment preview loaded.</p>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>View effective environment payload</summary>
+            <pre id="effectiveEnvPayload" class="code-box">No effective environment payload.</pre>
+          </details>
+          <div class="timeline-controls">
+            <label for="sessionFilterActorInput" class="timeline-label">Session Actor (optional)</label>
+            <input id="sessionFilterActorInput" class="timeline-input" placeholder="usr_ops_admin" />
+            <label for="sessionFilterStatusSelect" class="timeline-label">Session Status</label>
+            <select id="sessionFilterStatusSelect" class="timeline-select">
+              <option value="all">all</option>
+              <option value="accepted">accepted</option>
+              <option value="running">running</option>
+              <option value="waiting_approval">waiting_approval</option>
+              <option value="completed">completed</option>
+              <option value="failed">failed</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+            <button id="sessionRefreshBtn" class="btn btn-ghost">Refresh Sessions</button>
+            <label for="sessionSelect" class="timeline-label">Session</label>
+            <select id="sessionSelect" class="timeline-select"></select>
+            <label for="sessionIncludeEvidenceInput" class="timeline-label">Include evidence</label>
+            <input id="sessionIncludeEvidenceInput" class="timeline-checkbox" type="checkbox" checked />
+            <button id="sessionLoadDetailBtn" class="btn btn-ghost">Load Session Detail</button>
+          </div>
+          <p id="sessionMeta" class="run-meta">No session summary loaded.</p>
+          <div id="sessionList" class="session-list"></div>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>View sessions payload</summary>
+            <pre id="sessionPayload" class="code-box">No sessions payload.</pre>
+          </details>
+          <details class="advanced-tools-details progressive-disclosure">
+            <summary>View session detail payload</summary>
+            <pre id="sessionDetailPayload" class="code-box">No session detail payload.</pre>
+          </details>
+        </section>
       </section>
 
       <section class="panel reveal" data-ui-mode="starter">
         <div class="panel-head">
-          <h2>Advanced Tools</h2>
+          <h2>Need More Controls?</h2>
           <span class="tag">optional</span>
         </div>
         <details class="advanced-tools-details">
-          <summary>Open advanced tool list</summary>
+          <summary>Open full workstation modules</summary>
           <p class="run-meta">
             Blueprint Studio, Policy Patch/Rollback, Connector Governance, Timeline Diff,
             Replay Integrity, Replay Drift, and Manual Ops console.
@@ -204,7 +426,7 @@
 
       <section class="panel reveal" data-ui-mode="advanced" id="advancedWorkbenchPanel">
         <div class="panel-head">
-          <h2>Advanced Workbench</h2>
+          <h2>Main Workstation</h2>
           <span class="tag">Progressive Disclosure</span>
         </div>
         <div class="focus-metrics">

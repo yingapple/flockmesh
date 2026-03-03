@@ -70,12 +70,39 @@ export class StateDB {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS environment_sets (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS role_bindings (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_agents_workspace ON agents(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_bindings_workspace ON connector_bindings(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_bindings_agent ON connector_bindings(agent_id);
       CREATE INDEX IF NOT EXISTS idx_runs_workspace ON runs(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
       CREATE INDEX IF NOT EXISTS idx_runs_updated ON runs(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_environment_sets_workspace ON environment_sets(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_environment_sets_updated ON environment_sets(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_role_bindings_workspace ON role_bindings(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_role_bindings_actor ON role_bindings(actor_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_role_bindings_unique
+        ON role_bindings(workspace_id, actor_id, role);
     `);
 
     this.stmts = {
@@ -176,6 +203,87 @@ export class StateDB {
       `),
       listIdempotency: this.db.prepare(
         'SELECT idempotency_key, payload FROM idempotency_results ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      ),
+
+      upsertEnvironmentSet: this.db.prepare(`
+        INSERT INTO environment_sets (id, workspace_id, scope, mode, status, payload, created_at, updated_at)
+        VALUES (@id, @workspace_id, @scope, @mode, @status, @payload, @created_at, @updated_at)
+        ON CONFLICT(id) DO UPDATE SET
+          workspace_id = excluded.workspace_id,
+          scope = excluded.scope,
+          mode = excluded.mode,
+          status = excluded.status,
+          payload = excluded.payload,
+          updated_at = excluded.updated_at
+      `),
+      getEnvironmentSet: this.db.prepare('SELECT payload FROM environment_sets WHERE id = ?'),
+      listEnvironmentSetsBase: this.db.prepare(`
+        SELECT payload
+        FROM environment_sets
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countEnvironmentSetsBase: this.db.prepare('SELECT COUNT(*) AS total FROM environment_sets'),
+      listEnvironmentSetsByWorkspace: this.db.prepare(`
+        SELECT payload
+        FROM environment_sets
+        WHERE workspace_id = ?
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countEnvironmentSetsByWorkspace: this.db.prepare(
+        'SELECT COUNT(*) AS total FROM environment_sets WHERE workspace_id = ?'
+      ),
+      listActiveEnvironmentSetsByWorkspace: this.db.prepare(`
+        SELECT payload
+        FROM environment_sets
+        WHERE workspace_id = ? AND status = 'active'
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countActiveEnvironmentSetsByWorkspace: this.db.prepare(
+        "SELECT COUNT(*) AS total FROM environment_sets WHERE workspace_id = ? AND status = 'active'"
+      ),
+      listActiveEnvironmentSetsByWorkspaceAndMode: this.db.prepare(`
+        SELECT payload
+        FROM environment_sets
+        WHERE workspace_id = ? AND status = 'active' AND mode = ?
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countActiveEnvironmentSetsByWorkspaceAndMode: this.db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM environment_sets
+        WHERE workspace_id = ? AND status = 'active' AND mode = ?
+      `),
+
+      upsertRoleBinding: this.db.prepare(`
+        INSERT INTO role_bindings (id, workspace_id, actor_id, role, payload, created_at, updated_at)
+        VALUES (@id, @workspace_id, @actor_id, @role, @payload, @created_at, @updated_at)
+        ON CONFLICT(id) DO UPDATE SET
+          workspace_id = excluded.workspace_id,
+          actor_id = excluded.actor_id,
+          role = excluded.role,
+          payload = excluded.payload,
+          updated_at = excluded.updated_at
+      `),
+      getRoleBinding: this.db.prepare('SELECT payload FROM role_bindings WHERE id = ?'),
+      listRoleBindingsBase: this.db.prepare(`
+        SELECT payload
+        FROM role_bindings
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countRoleBindingsBase: this.db.prepare('SELECT COUNT(*) AS total FROM role_bindings'),
+      listRoleBindingsByWorkspace: this.db.prepare(`
+        SELECT payload
+        FROM role_bindings
+        WHERE workspace_id = ?
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+      `),
+      countRoleBindingsByWorkspace: this.db.prepare(
+        'SELECT COUNT(*) AS total FROM role_bindings WHERE workspace_id = ?'
       )
     };
   }
@@ -365,6 +473,29 @@ export class StateDB {
     };
   }
 
+  summarizeRunsByWorkspace({ workspaceId } = {}) {
+    const normalizedWorkspaceId = String(workspaceId || '').trim();
+    if (!normalizedWorkspaceId) {
+      return {
+        total: 0,
+        by_status: {}
+      };
+    }
+
+    const statuses = ['accepted', 'running', 'waiting_approval', 'completed', 'failed', 'cancelled'];
+    const byStatus = {};
+    for (const status of statuses) {
+      byStatus[status] = Number(
+        this.stmts.countRunsByWorkspaceAndStatus.get(normalizedWorkspaceId, status)?.total || 0
+      );
+    }
+
+    return {
+      total: Number(this.stmts.countRunsByWorkspace.get(normalizedWorkspaceId)?.total || 0),
+      by_status: byStatus
+    };
+  }
+
   getIdempotencyResult(key) {
     const row = this.stmts.getIdempotency.get(key);
     return parseJson(row?.payload);
@@ -389,5 +520,155 @@ export class StateDB {
       key: row.idempotency_key,
       payload: parseJson(row.payload)
     }));
+  }
+
+  saveEnvironmentSet(environmentSet) {
+    this.stmts.upsertEnvironmentSet.run({
+      id: environmentSet.id,
+      workspace_id: environmentSet.workspace_id,
+      scope: environmentSet.scope,
+      mode: environmentSet.mode,
+      status: environmentSet.status,
+      payload: JSON.stringify(environmentSet),
+      created_at: environmentSet.created_at,
+      updated_at: environmentSet.updated_at
+    });
+    return environmentSet;
+  }
+
+  getEnvironmentSet(id) {
+    const row = this.stmts.getEnvironmentSet.get(id);
+    return parseJson(row?.payload);
+  }
+
+  listEnvironmentSets({ workspaceId, limit = 100, offset = 0 } = {}) {
+    const boundedLimit = Math.min(Math.max(toInt(limit, 100), 1), 500);
+    const boundedOffset = Math.max(toInt(offset, 0), 0);
+    const normalizedWorkspaceId = String(workspaceId || '').trim();
+
+    if (normalizedWorkspaceId) {
+      const rows = this.stmts.listEnvironmentSetsByWorkspace.all(
+        normalizedWorkspaceId,
+        boundedLimit,
+        boundedOffset
+      );
+      const total = this.stmts.countEnvironmentSetsByWorkspace.get(normalizedWorkspaceId).total;
+      return {
+        total,
+        limit: boundedLimit,
+        offset: boundedOffset,
+        items: rows.map((row) => parseJson(row.payload))
+      };
+    }
+
+    const rows = this.stmts.listEnvironmentSetsBase.all(boundedLimit, boundedOffset);
+    const total = this.stmts.countEnvironmentSetsBase.get().total;
+    return {
+      total,
+      limit: boundedLimit,
+      offset: boundedOffset,
+      items: rows.map((row) => parseJson(row.payload))
+    };
+  }
+
+  listActiveEnvironmentSets({ workspaceId, mode, limit = 100, offset = 0 } = {}) {
+    const boundedLimit = Math.min(Math.max(toInt(limit, 100), 1), 500);
+    const boundedOffset = Math.max(toInt(offset, 0), 0);
+    const normalizedWorkspaceId = String(workspaceId || '').trim();
+    const normalizedMode = String(mode || '').trim();
+
+    if (!normalizedWorkspaceId) {
+      return {
+        total: 0,
+        limit: boundedLimit,
+        offset: boundedOffset,
+        items: []
+      };
+    }
+
+    if (normalizedMode) {
+      const rows = this.stmts.listActiveEnvironmentSetsByWorkspaceAndMode.all(
+        normalizedWorkspaceId,
+        normalizedMode,
+        boundedLimit,
+        boundedOffset
+      );
+      const total = Number(
+        this.stmts.countActiveEnvironmentSetsByWorkspaceAndMode
+          .get(normalizedWorkspaceId, normalizedMode)
+          ?.total || 0
+      );
+      return {
+        total,
+        limit: boundedLimit,
+        offset: boundedOffset,
+        items: rows.map((row) => parseJson(row.payload))
+      };
+    }
+
+    const rows = this.stmts.listActiveEnvironmentSetsByWorkspace.all(
+      normalizedWorkspaceId,
+      boundedLimit,
+      boundedOffset
+    );
+    const total = Number(
+      this.stmts.countActiveEnvironmentSetsByWorkspace
+        .get(normalizedWorkspaceId)
+        ?.total || 0
+    );
+    return {
+      total,
+      limit: boundedLimit,
+      offset: boundedOffset,
+      items: rows.map((row) => parseJson(row.payload))
+    };
+  }
+
+  saveRoleBinding(roleBinding) {
+    this.stmts.upsertRoleBinding.run({
+      id: roleBinding.id,
+      workspace_id: roleBinding.workspace_id,
+      actor_id: roleBinding.actor_id,
+      role: roleBinding.role,
+      payload: JSON.stringify(roleBinding),
+      created_at: roleBinding.created_at,
+      updated_at: roleBinding.updated_at
+    });
+    return roleBinding;
+  }
+
+  getRoleBinding(id) {
+    const row = this.stmts.getRoleBinding.get(id);
+    return parseJson(row?.payload);
+  }
+
+  listRoleBindings({ workspaceId, limit = 200, offset = 0 } = {}) {
+    const boundedLimit = Math.min(Math.max(toInt(limit, 200), 1), 1000);
+    const boundedOffset = Math.max(toInt(offset, 0), 0);
+    const normalizedWorkspaceId = String(workspaceId || '').trim();
+
+    if (normalizedWorkspaceId) {
+      const rows = this.stmts.listRoleBindingsByWorkspace.all(
+        normalizedWorkspaceId,
+        boundedLimit,
+        boundedOffset
+      );
+      const total = this.stmts.countRoleBindingsByWorkspace.get(normalizedWorkspaceId).total;
+      return {
+        total,
+        limit: boundedLimit,
+        offset: boundedOffset,
+        items: rows.map((row) => parseJson(row.payload))
+      };
+    }
+
+    const rows = this.stmts.listRoleBindingsBase.all(boundedLimit, boundedOffset);
+    const total = this.stmts.countRoleBindingsBase.get().total;
+    return {
+      total,
+      limit: boundedLimit,
+      offset: boundedOffset,
+      items: rows.map((row) => parseJson(row.payload))
+    };
   }
 }

@@ -848,6 +848,448 @@ test('one-person quickstart endpoint rejects unknown template', async () => {
   }
 });
 
+test('environment set verify endpoint returns provider readiness summary', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/v0/environments/sets',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        mode: 'opc',
+        scope: 'workspace',
+        name: 'opc_default_env',
+        entries: [
+          {
+            provider: 'feishu',
+            key: 'FLOCKMESH_FEISHU_WEBHOOK_URL',
+            value: 'https://open.feishu.cn/open-apis/bot/v2/hook/mockhookvalue',
+            visibility: 'secret'
+          },
+          {
+            provider: 'langfuse',
+            key: 'LANGFUSE_HOST',
+            value: 'https://cloud.langfuse.com',
+            visibility: 'plain'
+          },
+          {
+            provider: 'langfuse',
+            key: 'LANGFUSE_PUBLIC_KEY',
+            value: 'pk_test_public',
+            visibility: 'secret'
+          },
+          {
+            provider: 'langfuse',
+            key: 'LANGFUSE_SECRET_KEY',
+            value: 'sk_test_secret',
+            visibility: 'secret'
+          }
+        ]
+      }
+    });
+    assert.equal(createRes.statusCode, 201);
+    const created = createRes.json();
+
+    const verifyRes = await app.inject({
+      method: 'POST',
+      url: `/v0/environments/sets/${created.id}/verify`,
+      payload: {}
+    });
+    assert.equal(verifyRes.statusCode, 200);
+    const payload = verifyRes.json();
+    assert.equal(payload.version, 'v0');
+    assert.equal(payload.set.id, created.id);
+    assert.equal(payload.report.workspace_id, 'wsp_mindverse_cn');
+    assert.ok(['pass', 'warn'].includes(payload.report.status));
+    assert.equal(payload.report.runtime_readiness.feishu_delivery, true);
+    assert.equal(payload.report.runtime_readiness.langfuse_observability, true);
+    assert.ok(payload.report.providers.some((item) => item.provider === 'feishu'));
+    assert.ok(payload.report.providers.some((item) => item.provider === 'langfuse'));
+  } finally {
+    await app.close();
+  }
+});
+
+test('environment set verify supports connectivity probe mode with provider-level probe summary', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/v0/environments/sets',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        mode: 'organization',
+        scope: 'workspace',
+        name: 'org_generic_env',
+        entries: [
+          {
+            provider: 'generic',
+            key: 'DEMO_FLAG',
+            value: 'true',
+            visibility: 'plain'
+          }
+        ]
+      }
+    });
+    assert.equal(createRes.statusCode, 201);
+    const created = createRes.json();
+
+    const verifyRes = await app.inject({
+      method: 'POST',
+      url: `/v0/environments/sets/${created.id}/verify`,
+      payload: {
+        probe_mode: 'connectivity',
+        timeout_ms: 1200
+      }
+    });
+    assert.equal(verifyRes.statusCode, 200);
+    const payload = verifyRes.json();
+    assert.equal(payload.probe_mode, 'connectivity');
+    assert.equal(payload.timeout_ms, 1200);
+    assert.equal(payload.connectivity.status, 'pass');
+    assert.ok(Array.isArray(payload.connectivity.providers));
+    assert.ok(payload.connectivity.providers.some((item) => item.provider === 'generic'));
+    assert.ok(payload.connectivity.providers.some((item) => item.status === 'skip'));
+  } finally {
+    await app.close();
+  }
+});
+
+test('effective environment endpoint resolves actor and role targeted entries', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const adminGrantRes = await app.inject({
+      method: 'POST',
+      url: '/v0/access/role-bindings',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        actor_id: 'usr_yingapple',
+        role: 'workspace_admin'
+      }
+    });
+    assert.equal(adminGrantRes.statusCode, 201);
+
+    const operatorGrantRes = await app.inject({
+      method: 'POST',
+      url: '/v0/access/role-bindings',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        actor_id: 'usr_alice_ops',
+        role: 'operator'
+      }
+    });
+    assert.equal(operatorGrantRes.statusCode, 201);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/v0/environments/sets',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        mode: 'organization',
+        scope: 'workspace',
+        name: 'org_targeted_env',
+        entries: [
+          { provider: 'generic', key: 'SHARED_FLAG', value: 'enabled', visibility: 'plain' },
+          { provider: 'generic', key: 'OPS_QUEUE', value: 'ops-oncall', visibility: 'plain', target: 'role:operator' },
+          { provider: 'generic', key: 'ADMIN_TOKEN', value: 'secret_admin_token', visibility: 'secret', target: 'role:workspace_admin' },
+          { provider: 'generic', key: 'ALICE_ONLY', value: 'alice_data', visibility: 'plain', target: 'actor:usr_alice_ops' }
+        ]
+      }
+    });
+    assert.equal(createRes.statusCode, 201);
+
+    const aliceViewRes = await app.inject({
+      method: 'GET',
+      url: '/v0/environments/effective?workspace_id=wsp_mindverse_cn&actor_id=usr_alice_ops&mode=organization'
+    });
+    assert.equal(aliceViewRes.statusCode, 200);
+    const aliceView = aliceViewRes.json();
+    assert.equal(aliceView.actor_id, 'usr_alice_ops');
+    const aliceKeys = new Set(aliceView.items.map((item) => item.key));
+    assert.equal(aliceKeys.has('SHARED_FLAG'), true);
+    assert.equal(aliceKeys.has('OPS_QUEUE'), true);
+    assert.equal(aliceKeys.has('ALICE_ONLY'), true);
+    assert.equal(aliceKeys.has('ADMIN_TOKEN'), false);
+
+    const adminSelfRes = await app.inject({
+      method: 'GET',
+      url: '/v0/environments/effective?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple&mode=organization&include_values=true'
+    });
+    assert.equal(adminSelfRes.statusCode, 200);
+    const adminSelf = adminSelfRes.json();
+    const sharedEntry = adminSelf.items.find((item) => item.key === 'SHARED_FLAG');
+    assert.ok(sharedEntry);
+    assert.equal(sharedEntry.value, 'enabled');
+    const adminTokenEntry = adminSelf.items.find((item) => item.key === 'ADMIN_TOKEN');
+    assert.ok(adminTokenEntry);
+    assert.equal(adminTokenEntry.value, '');
+    assert.notEqual(adminTokenEntry.masked_value, '');
+
+    const crossActorDeniedRes = await app.inject({
+      method: 'GET',
+      url: '/v0/environments/effective?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple&mode=organization',
+      headers: {
+        'x-flockmesh-actor-id': 'usr_alice_ops'
+      }
+    });
+    assert.equal(crossActorDeniedRes.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+test('access permissions endpoint reflects bootstrap and granted roles', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const beforeRes = await app.inject({
+      method: 'GET',
+      url: '/v0/access/permissions?workspace_id=wsp_mindverse_cn'
+    });
+    assert.equal(beforeRes.statusCode, 200);
+    const beforePayload = beforeRes.json();
+    assert.equal(beforePayload.bootstrap_available, true);
+    assert.equal(beforePayload.roles.length, 0);
+
+    const grantRes = await app.inject({
+      method: 'POST',
+      url: '/v0/access/role-bindings',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        actor_id: 'usr_yingapple',
+        role: 'workspace_admin'
+      }
+    });
+    assert.equal(grantRes.statusCode, 201);
+    assert.equal(grantRes.json().role, 'workspace_admin');
+
+    const afterRes = await app.inject({
+      method: 'GET',
+      url: '/v0/access/permissions?workspace_id=wsp_mindverse_cn'
+    });
+    assert.equal(afterRes.statusCode, 200);
+    const afterPayload = afterRes.json();
+    assert.equal(afterPayload.bootstrap_available, false);
+    assert.ok(afterPayload.roles.includes('workspace_admin'));
+    assert.ok(afterPayload.permissions.includes('environment.manage'));
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/v0/access/role-bindings?workspace_id=wsp_mindverse_cn&limit=200&offset=0'
+    });
+    assert.equal(listRes.statusCode, 200);
+    const listPayload = listRes.json();
+    assert.ok(listPayload.items.some((item) => item.role === 'workspace_admin'));
+  } finally {
+    await app.close();
+  }
+});
+
+test('session endpoints enforce workspace role permissions and allow evidence read', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const agent = await createAgent(app);
+    await createBinding(app, agent.id);
+    const run = await createRun(app, agent.id);
+
+    const sessionsRes = await app.inject({
+      method: 'GET',
+      url: '/v0/sessions?workspace_id=wsp_mindverse_cn&limit=50&offset=0'
+    });
+    assert.equal(sessionsRes.statusCode, 200);
+    const sessionsPayload = sessionsRes.json();
+    assert.ok(sessionsPayload.items.some((item) => item.session_id === run.id));
+
+    const detailRes = await app.inject({
+      method: 'GET',
+      url: `/v0/sessions/${run.id}?include_evidence=true&limit=100`
+    });
+    assert.equal(detailRes.statusCode, 200);
+    const detailPayload = detailRes.json();
+    assert.equal(detailPayload.session.session_id, run.id);
+    assert.ok(Array.isArray(detailPayload.evidence.events.items));
+    assert.ok(Array.isArray(detailPayload.evidence.audit.items));
+
+    const deniedRes = await app.inject({
+      method: 'GET',
+      url: '/v0/sessions?workspace_id=wsp_mindverse_cn',
+      headers: {
+        'x-flockmesh-actor-id': 'usr_unassigned_guest'
+      }
+    });
+    assert.equal(deniedRes.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+test('workstation readiness endpoint returns actionable stage score for fresh workspace', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const readinessRes = await app.inject({
+      method: 'GET',
+      url: '/v0/workstation/readiness?workspace_id=wsp_mindverse_cn&mode=opc'
+    });
+    assert.equal(readinessRes.statusCode, 200);
+    const payload = readinessRes.json();
+    assert.equal(payload.version, 'v0');
+    assert.equal(payload.workspace_id, 'wsp_mindverse_cn');
+    assert.equal(payload.actor_id, 'usr_yingapple');
+    assert.ok(Array.isArray(payload.stages));
+    assert.ok(payload.stages.length >= 5);
+    const stageIds = new Set(payload.stages.map((item) => item.id));
+    assert.equal(stageIds.has('access'), true);
+    assert.equal(stageIds.has('environment'), true);
+    assert.equal(stageIds.has('bridge'), true);
+    assert.equal(stageIds.has('delivery'), true);
+    assert.equal(stageIds.has('session_audit'), true);
+
+    const environmentStage = payload.stages.find((item) => item.id === 'environment');
+    assert.ok(environmentStage);
+    assert.equal(environmentStage.status, 'fail');
+
+    const actionIds = new Set((payload.next_actions || []).map((item) => item.action_id));
+    assert.equal(actionIds.has('create_environment_set'), true);
+    assert.equal(actionIds.has('start_first_run'), true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('workstation readiness endpoint rejects cross-actor view even before role bindings exist', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const crossActorDenied = await app.inject({
+      method: 'GET',
+      url: '/v0/workstation/readiness?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple',
+      headers: {
+        'x-flockmesh-actor-id': 'usr_alice_ops'
+      }
+    });
+    assert.equal(crossActorDenied.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+test('workstation readiness endpoint enforces role.manage for cross-actor view and reports bridge/delivery readiness', async () => {
+  const app = createTestApp();
+  await app.ready();
+
+  try {
+    const grantAdminRes = await app.inject({
+      method: 'POST',
+      url: '/v0/access/role-bindings',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        actor_id: 'usr_yingapple',
+        role: 'workspace_admin'
+      }
+    });
+    assert.equal(grantAdminRes.statusCode, 201);
+
+    const grantOperatorRes = await app.inject({
+      method: 'POST',
+      url: '/v0/access/role-bindings',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        actor_id: 'usr_alice_ops',
+        role: 'operator'
+      }
+    });
+    assert.equal(grantOperatorRes.statusCode, 201);
+
+    const crossActorDenied = await app.inject({
+      method: 'GET',
+      url: '/v0/workstation/readiness?workspace_id=wsp_mindverse_cn&actor_id=usr_yingapple',
+      headers: {
+        'x-flockmesh-actor-id': 'usr_alice_ops'
+      }
+    });
+    assert.equal(crossActorDenied.statusCode, 403);
+
+    const createEnvRes = await app.inject({
+      method: 'POST',
+      url: '/v0/environments/sets',
+      payload: {
+        workspace_id: 'wsp_mindverse_cn',
+        mode: 'opc',
+        scope: 'workspace',
+        name: 'opc_bridge_env',
+        entries: [
+          {
+            provider: 'feishu',
+            key: 'FLOCKMESH_FEISHU_WEBHOOK_URL',
+            value: 'https://open.feishu.cn/open-apis/bot/v2/hook/mockhookvalue',
+            visibility: 'secret'
+          },
+          {
+            provider: 'codex',
+            key: 'OPENAI_API_KEY',
+            value: 'sk-test-readiness',
+            visibility: 'secret'
+          },
+          {
+            provider: 'codex',
+            key: 'OPENAI_BASE_URL',
+            value: 'https://api.openai.com/v1',
+            visibility: 'plain'
+          }
+        ]
+      }
+    });
+    assert.equal(createEnvRes.statusCode, 201);
+    const createdEnv = createEnvRes.json();
+
+    const applyRuntimeRes = await app.inject({
+      method: 'POST',
+      url: `/v0/environments/sets/${createdEnv.id}/apply-runtime`,
+      payload: {}
+    });
+    assert.equal(applyRuntimeRes.statusCode, 200);
+
+    const agent = await createAgent(app);
+    await createBinding(app, agent.id);
+    await createRun(app, agent.id);
+
+    const readinessRes = await app.inject({
+      method: 'GET',
+      url: '/v0/workstation/readiness?workspace_id=wsp_mindverse_cn&mode=opc&workspace_path=%2Ftmp%2Fflockmesh-workspace',
+      headers: {
+        'x-flockmesh-actor-id': 'usr_yingapple'
+      }
+    });
+    assert.equal(readinessRes.statusCode, 200);
+    const payload = readinessRes.json();
+    assert.equal(payload.score.percent >= 60, true);
+    const stageById = new Map(payload.stages.map((item) => [item.id, item]));
+    const bridgeStage = stageById.get('bridge');
+    const deliveryStage = stageById.get('delivery');
+    const environmentStage = stageById.get('environment');
+    assert.ok(bridgeStage);
+    assert.ok(deliveryStage);
+    assert.ok(environmentStage);
+    assert.equal(bridgeStage.status, 'pass');
+    assert.equal(deliveryStage.status, 'pass');
+    assert.ok(['pass', 'warn'].includes(environmentStage.status));
+  } finally {
+    await app.close();
+  }
+});
+
 test('agent blueprint apply strict mode blocks missing connector manifests', async () => {
   const app = createTestApp();
   await app.ready();

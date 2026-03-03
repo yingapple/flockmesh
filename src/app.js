@@ -97,6 +97,46 @@ const MCP_PROTOCOL_HEADER = 'mcp-protocol-version';
 const MCP_SESSION_HEADER = 'mcp-session-id';
 const MCP_BRIDGE_SESSION_TTL_MS = 30 * 60 * 1000;
 const MCP_BRIDGE_MAX_SESSIONS = 500;
+const ACCESS_MODE_SET = new Set(['opc', 'organization']);
+const ENV_SCOPE_SET = new Set(['opc', 'workspace', 'org', 'agent']);
+const ENV_VISIBILITY_SET = new Set(['secret', 'masked', 'plain']);
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{1,127}$/;
+const ENV_VERIFY_PROBE_MODE_SET = new Set(['syntax', 'connectivity']);
+const WORKSTATION_READINESS_STAGE_WEIGHT = Object.freeze({
+  access: 25,
+  environment: 30,
+  bridge: 20,
+  delivery: 15,
+  session_audit: 10
+});
+const ROLE_NAME_SET = new Set(['org_admin', 'workspace_admin', 'operator', 'auditor']);
+const ROLE_PERMISSION_LIBRARY = Object.freeze({
+  org_admin: [
+    'environment.manage',
+    'role.manage',
+    'run.execute',
+    'approval.resolve',
+    'audit.read',
+    'session.read'
+  ],
+  workspace_admin: [
+    'environment.manage',
+    'role.manage',
+    'run.execute',
+    'approval.resolve',
+    'audit.read',
+    'session.read'
+  ],
+  operator: [
+    'run.execute',
+    'approval.resolve',
+    'session.read'
+  ],
+  auditor: [
+    'audit.read',
+    'session.read'
+  ]
+});
 
 function sha256(payload) {
   return `sha256:${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
@@ -132,6 +172,1800 @@ async function withTimeout(promiseFactory, timeoutMs) {
         reject(err);
       });
   });
+}
+
+function asTrimmedString(value = '') {
+  return String(value || '').trim();
+}
+
+function maskSecretUrl(rawUrl = '') {
+  const value = asTrimmedString(rawUrl);
+  if (!value) return '';
+
+  try {
+    const parsed = new URL(value);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const tail = segments.length ? segments[segments.length - 1] : '';
+    const maskedTail = tail
+      ? `${tail.slice(0, 4)}...${tail.slice(-4)}`
+      : '...';
+    const prefix = segments.length > 1
+      ? `/${segments.slice(0, -1).join('/')}`
+      : '';
+    return `${parsed.origin}${prefix}/${maskedTail}`;
+  } catch {
+    if (value.length <= 10) return `${value.slice(0, 2)}...`;
+    return `${value.slice(0, 6)}...${value.slice(-4)}`;
+  }
+}
+
+function resolveActiveFeishuWebhook(app) {
+  const runtimeWebhook = asTrimmedString(app?.integrationRuntime?.feishu_webhook_url);
+  if (runtimeWebhook) {
+    return { webhook_url: runtimeWebhook, source: 'runtime' };
+  }
+
+  const envWebhook = asTrimmedString(process.env.FLOCKMESH_FEISHU_WEBHOOK_URL);
+  if (envWebhook) {
+    return { webhook_url: envWebhook, source: 'env' };
+  }
+
+  return { webhook_url: '', source: 'none' };
+}
+
+function resolveFeishuConnectionStatus(app) {
+  const active = resolveActiveFeishuWebhook(app);
+  return {
+    integration: 'feishu',
+    connected: Boolean(active.webhook_url),
+    delivery_mode: active.webhook_url ? 'feishu_webhook' : 'stub',
+    source: active.source,
+    webhook_masked: active.webhook_url ? maskSecretUrl(active.webhook_url) : '',
+    webhook_configurable: true
+  };
+}
+
+function normalizeAccessMode(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (ACCESS_MODE_SET.has(normalized)) return normalized;
+  return 'opc';
+}
+
+function normalizeEnvironmentScope(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (ENV_SCOPE_SET.has(normalized)) return normalized;
+  return 'workspace';
+}
+
+function normalizeRoleName(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!ROLE_NAME_SET.has(normalized)) {
+    throw new Error(`Unsupported role: ${value}`);
+  }
+  return normalized;
+}
+
+function maskSensitiveValue(raw = '') {
+  const value = asTrimmedString(raw);
+  if (!value) return '';
+  if (value.length <= 6) return '***';
+  return `${value.slice(0, 2)}***${value.slice(-2)}`;
+}
+
+function sanitizeEnvironmentEntry(entry = {}, { includeValue = false } = {}) {
+  const key = asTrimmedString(entry.key);
+  const visibility = asTrimmedString(entry.visibility || 'secret') || 'secret';
+  const value = asTrimmedString(entry.value || '');
+  const masked = maskSensitiveValue(value);
+
+  return {
+    key,
+    provider: asTrimmedString(entry.provider || 'generic') || 'generic',
+    visibility,
+    target: asTrimmedString(entry.target || ''),
+    updated_at: asTrimmedString(entry.updated_at || nowIso()),
+    value: includeValue && visibility === 'plain' ? value : '',
+    masked_value: visibility === 'plain' ? value : masked
+  };
+}
+
+function sanitizeEnvironmentSet(environmentSet = {}, { includePlainValues = false } = {}) {
+  const entries = Array.isArray(environmentSet.entries) ? environmentSet.entries : [];
+  return {
+    ...environmentSet,
+    entries: entries.map((entry) =>
+      sanitizeEnvironmentEntry(entry, { includeValue: includePlainValues })
+    )
+  };
+}
+
+function normalizeEnvironmentEntries(rawEntries = []) {
+  if (!Array.isArray(rawEntries)) {
+    throw new Error('entries must be an array');
+  }
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (let i = 0; i < rawEntries.length; i += 1) {
+    const raw = rawEntries[i];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error(`entries[${i}] must be an object`);
+    }
+
+    const key = asTrimmedString(raw.key).toUpperCase();
+    if (!ENV_KEY_PATTERN.test(key)) {
+      throw new Error(`entries[${i}] invalid key`);
+    }
+
+    const provider = asTrimmedString(raw.provider || 'generic').toLowerCase() || 'generic';
+    const visibility = asTrimmedString(raw.visibility || 'secret').toLowerCase() || 'secret';
+    if (!ENV_VISIBILITY_SET.has(visibility)) {
+      throw new Error(`entries[${i}] invalid visibility`);
+    }
+
+    const value = asTrimmedString(raw.value);
+    if (!value) {
+      throw new Error(`entries[${i}] value is required`);
+    }
+
+    const dedupeKey = `${provider}::${key}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    normalized.push({
+      key,
+      provider,
+      visibility,
+      value,
+      target: asTrimmedString(raw.target || ''),
+      updated_at: nowIso()
+    });
+  }
+
+  return normalized;
+}
+
+function mergeEnvironmentEntries(existingEntries = [], patchEntries = []) {
+  const result = [];
+  const indexByKey = new Map();
+
+  for (const existing of existingEntries) {
+    const provider = asTrimmedString(existing.provider || 'generic').toLowerCase() || 'generic';
+    const key = asTrimmedString(existing.key).toUpperCase();
+    const dedupeKey = `${provider}::${key}`;
+    const item = {
+      key,
+      provider,
+      visibility: asTrimmedString(existing.visibility || 'secret').toLowerCase() || 'secret',
+      value: asTrimmedString(existing.value),
+      target: asTrimmedString(existing.target || ''),
+      updated_at: asTrimmedString(existing.updated_at || nowIso())
+    };
+    indexByKey.set(dedupeKey, result.length);
+    result.push(item);
+  }
+
+  for (const patch of patchEntries) {
+    const dedupeKey = `${patch.provider}::${patch.key}`;
+    if (indexByKey.has(dedupeKey)) {
+      result[indexByKey.get(dedupeKey)] = { ...result[indexByKey.get(dedupeKey)], ...patch };
+      continue;
+    }
+    indexByKey.set(dedupeKey, result.length);
+    result.push(patch);
+  }
+
+  return result;
+}
+
+function parseHttpUrl(rawValue = '') {
+  const value = asTrimmedString(rawValue);
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function isSensitiveEnvironmentKey(rawKey = '') {
+  const key = asTrimmedString(rawKey).toUpperCase();
+  if (!key) return false;
+  return (
+    key.includes('SECRET')
+    || key.includes('TOKEN')
+    || key.includes('PASSWORD')
+    || key.includes('PRIVATE')
+    || key.includes('API_KEY')
+    || key.includes('ACCESS_KEY')
+  );
+}
+
+function finalizeEnvironmentVerification(provider = '', checks = [], recommendations = []) {
+  const failCount = checks.filter((item) => item.status === 'fail').length;
+  const warnCount = checks.filter((item) => item.status === 'warn').length;
+  const status = failCount > 0 ? 'fail' : warnCount > 0 ? 'warn' : 'pass';
+
+  return {
+    provider,
+    status,
+    summary: {
+      total_checks: checks.length,
+      pass: checks.filter((item) => item.status === 'pass').length,
+      warn: warnCount,
+      fail: failCount
+    },
+    checks,
+    recommendations: Array.from(new Set(recommendations.filter(Boolean)))
+  };
+}
+
+function buildEnvironmentProviderVerification(provider = '', entries = []) {
+  const normalizedProvider = asTrimmedString(provider || 'generic').toLowerCase() || 'generic';
+  const list = Array.isArray(entries) ? entries : [];
+  const checks = [];
+  const recommendations = [];
+
+  const addCheck = ({ code, status, message, key = '' }) => {
+    checks.push({
+      code: asTrimmedString(code),
+      status: asTrimmedString(status) || 'warn',
+      key: asTrimmedString(key),
+      message: asTrimmedString(message)
+    });
+  };
+
+  const findByKeys = (keys = []) => {
+    const keySet = new Set(keys.map((item) => asTrimmedString(item).toUpperCase()).filter(Boolean));
+    return list.find((entry) => {
+      const key = asTrimmedString(entry.key).toUpperCase();
+      const value = asTrimmedString(entry.value);
+      return keySet.has(key) && Boolean(value);
+    }) || null;
+  };
+
+  if (!list.length) {
+    addCheck({
+      code: `${normalizedProvider}.entries.missing`,
+      status: 'fail',
+      message: 'No entries found for this provider.'
+    });
+    recommendations.push(`Add required keys for provider ${normalizedProvider}.`);
+    return finalizeEnvironmentVerification(normalizedProvider, checks, recommendations);
+  }
+
+  if (normalizedProvider === 'feishu') {
+    const webhook = findByKeys(['FLOCKMESH_FEISHU_WEBHOOK_URL', 'FEISHU_WEBHOOK_URL']);
+    if (!webhook) {
+      addCheck({
+        code: 'feishu.webhook.missing',
+        status: 'fail',
+        key: 'FLOCKMESH_FEISHU_WEBHOOK_URL',
+        message: 'Feishu webhook URL is required.'
+      });
+      recommendations.push('Add Feishu webhook URL to enable approval/result delivery.');
+    } else {
+      const parsed = parseHttpUrl(webhook.value);
+      if (!parsed) {
+        addCheck({
+          code: 'feishu.webhook.invalid_url',
+          status: 'fail',
+          key: webhook.key,
+          message: 'Webhook must be a valid http/https URL.'
+        });
+      } else {
+        addCheck({
+          code: 'feishu.webhook.url_format',
+          status: 'pass',
+          key: webhook.key,
+          message: 'Webhook URL format is valid.'
+        });
+        if (!/(feishu|lark)/i.test(parsed.hostname)) {
+          addCheck({
+            code: 'feishu.webhook.host_unusual',
+            status: 'warn',
+            key: webhook.key,
+            message: 'Webhook host does not look like Feishu/Lark.'
+          });
+          recommendations.push('Confirm webhook host is the official Feishu/Lark endpoint.');
+        }
+      }
+    }
+  } else if (normalizedProvider === 'langfuse') {
+    const host = findByKeys(['LANGFUSE_HOST']);
+    const publicKey = findByKeys(['LANGFUSE_PUBLIC_KEY']);
+    const secretKey = findByKeys(['LANGFUSE_SECRET_KEY']);
+
+    if (!host) {
+      addCheck({
+        code: 'langfuse.host.missing',
+        status: 'fail',
+        key: 'LANGFUSE_HOST',
+        message: 'LANGFUSE_HOST is required.'
+      });
+    } else {
+      const parsed = parseHttpUrl(host.value);
+      if (!parsed) {
+        addCheck({
+          code: 'langfuse.host.invalid_url',
+          status: 'fail',
+          key: host.key,
+          message: 'LANGFUSE_HOST must be a valid URL.'
+        });
+      } else {
+        addCheck({
+          code: 'langfuse.host.url_format',
+          status: parsed.protocol === 'https:' ? 'pass' : 'warn',
+          key: host.key,
+          message: parsed.protocol === 'https:'
+            ? 'LANGFUSE_HOST uses HTTPS.'
+            : 'LANGFUSE_HOST should use HTTPS in production.'
+        });
+      }
+    }
+
+    if (!publicKey) {
+      addCheck({
+        code: 'langfuse.public_key.missing',
+        status: 'fail',
+        key: 'LANGFUSE_PUBLIC_KEY',
+        message: 'LANGFUSE_PUBLIC_KEY is required.'
+      });
+    } else {
+      const isLikely = asTrimmedString(publicKey.value).startsWith('pk_');
+      addCheck({
+        code: 'langfuse.public_key.format',
+        status: isLikely ? 'pass' : 'warn',
+        key: publicKey.key,
+        message: isLikely
+          ? 'LANGFUSE_PUBLIC_KEY format looks valid.'
+          : 'LANGFUSE_PUBLIC_KEY usually starts with pk_.'
+      });
+    }
+
+    if (!secretKey) {
+      addCheck({
+        code: 'langfuse.secret_key.missing',
+        status: 'fail',
+        key: 'LANGFUSE_SECRET_KEY',
+        message: 'LANGFUSE_SECRET_KEY is required.'
+      });
+    } else {
+      const isLikely = asTrimmedString(secretKey.value).startsWith('sk_');
+      addCheck({
+        code: 'langfuse.secret_key.format',
+        status: isLikely ? 'pass' : 'warn',
+        key: secretKey.key,
+        message: isLikely
+          ? 'LANGFUSE_SECRET_KEY format looks valid.'
+          : 'LANGFUSE_SECRET_KEY usually starts with sk_.'
+      });
+    }
+  } else if (normalizedProvider === 'claude_code') {
+    const apiKey = findByKeys(['ANTHROPIC_API_KEY']);
+    const baseUrl = findByKeys(['ANTHROPIC_BASE_URL']);
+
+    if (!apiKey) {
+      addCheck({
+        code: 'claude_code.api_key.missing',
+        status: 'fail',
+        key: 'ANTHROPIC_API_KEY',
+        message: 'ANTHROPIC_API_KEY is required.'
+      });
+      recommendations.push('Configure ANTHROPIC_API_KEY for Claude Code bridge.');
+    } else {
+      const likely = asTrimmedString(apiKey.value).startsWith('sk-ant-');
+      addCheck({
+        code: 'claude_code.api_key.format',
+        status: likely ? 'pass' : 'warn',
+        key: apiKey.key,
+        message: likely
+          ? 'ANTHROPIC_API_KEY format looks valid.'
+          : 'ANTHROPIC_API_KEY usually starts with sk-ant-.'
+      });
+    }
+
+    if (baseUrl) {
+      addCheck({
+        code: 'claude_code.base_url.format',
+        status: parseHttpUrl(baseUrl.value) ? 'pass' : 'warn',
+        key: baseUrl.key,
+        message: parseHttpUrl(baseUrl.value)
+          ? 'ANTHROPIC_BASE_URL format is valid.'
+          : 'ANTHROPIC_BASE_URL should be a valid URL.'
+      });
+    } else {
+      addCheck({
+        code: 'claude_code.base_url.default',
+        status: 'pass',
+        key: 'ANTHROPIC_BASE_URL',
+        message: 'ANTHROPIC_BASE_URL is optional; default endpoint can be used.'
+      });
+    }
+  } else if (normalizedProvider === 'codex') {
+    const apiKey = findByKeys(['OPENAI_API_KEY']);
+    const baseUrl = findByKeys(['OPENAI_BASE_URL']);
+
+    if (!apiKey) {
+      addCheck({
+        code: 'codex.api_key.missing',
+        status: 'fail',
+        key: 'OPENAI_API_KEY',
+        message: 'OPENAI_API_KEY is required.'
+      });
+      recommendations.push('Configure OPENAI_API_KEY for Codex/OpenAI runtime.');
+    } else {
+      const likely = asTrimmedString(apiKey.value).startsWith('sk-');
+      addCheck({
+        code: 'codex.api_key.format',
+        status: likely ? 'pass' : 'warn',
+        key: apiKey.key,
+        message: likely
+          ? 'OPENAI_API_KEY format looks valid.'
+          : 'OPENAI_API_KEY usually starts with sk-.'
+      });
+    }
+
+    if (baseUrl) {
+      addCheck({
+        code: 'codex.base_url.format',
+        status: parseHttpUrl(baseUrl.value) ? 'pass' : 'warn',
+        key: baseUrl.key,
+        message: parseHttpUrl(baseUrl.value)
+          ? 'OPENAI_BASE_URL format is valid.'
+          : 'OPENAI_BASE_URL should be a valid URL.'
+      });
+    } else {
+      addCheck({
+        code: 'codex.base_url.default',
+        status: 'pass',
+        key: 'OPENAI_BASE_URL',
+        message: 'OPENAI_BASE_URL is optional; default endpoint can be used.'
+      });
+    }
+  } else if (normalizedProvider === 'aws') {
+    const accessKeyId = findByKeys(['AWS_ACCESS_KEY_ID']);
+    const secretAccessKey = findByKeys(['AWS_SECRET_ACCESS_KEY']);
+    const region = findByKeys(['AWS_REGION']);
+
+    if (!accessKeyId) {
+      addCheck({
+        code: 'aws.access_key_id.missing',
+        status: 'fail',
+        key: 'AWS_ACCESS_KEY_ID',
+        message: 'AWS_ACCESS_KEY_ID is required.'
+      });
+    } else {
+      const likely = /^(AKIA|ASIA)[A-Z0-9]{12,20}$/.test(asTrimmedString(accessKeyId.value));
+      addCheck({
+        code: 'aws.access_key_id.format',
+        status: likely ? 'pass' : 'warn',
+        key: accessKeyId.key,
+        message: likely
+          ? 'AWS_ACCESS_KEY_ID format looks valid.'
+          : 'AWS_ACCESS_KEY_ID format looks unusual.'
+      });
+    }
+
+    if (!secretAccessKey) {
+      addCheck({
+        code: 'aws.secret_access_key.missing',
+        status: 'fail',
+        key: 'AWS_SECRET_ACCESS_KEY',
+        message: 'AWS_SECRET_ACCESS_KEY is required.'
+      });
+    } else {
+      const value = asTrimmedString(secretAccessKey.value);
+      addCheck({
+        code: 'aws.secret_access_key.length',
+        status: value.length >= 20 ? 'pass' : 'fail',
+        key: secretAccessKey.key,
+        message: value.length >= 20
+          ? 'AWS_SECRET_ACCESS_KEY length looks valid.'
+          : 'AWS_SECRET_ACCESS_KEY is too short.'
+      });
+    }
+
+    if (!region) {
+      addCheck({
+        code: 'aws.region.missing',
+        status: 'warn',
+        key: 'AWS_REGION',
+        message: 'AWS_REGION is recommended for stable behavior.'
+      });
+      recommendations.push('Set AWS_REGION to avoid cross-region defaults.');
+    } else {
+      const likely = /^[a-z]{2}-[a-z]+-\d$/i.test(asTrimmedString(region.value));
+      addCheck({
+        code: 'aws.region.format',
+        status: likely ? 'pass' : 'warn',
+        key: region.key,
+        message: likely
+          ? 'AWS_REGION format looks valid.'
+          : 'AWS_REGION format looks unusual (example: us-east-1).'
+      });
+    }
+  } else {
+    for (const entry of list) {
+      const value = asTrimmedString(entry.value);
+      addCheck({
+        code: `${normalizedProvider}.entry.${asTrimmedString(entry.key).toLowerCase() || 'unknown'}`,
+        status: value ? 'pass' : 'fail',
+        key: asTrimmedString(entry.key),
+        message: value ? 'Entry value is present.' : 'Entry value is empty.'
+      });
+    }
+  }
+
+  for (const entry of list) {
+    const key = asTrimmedString(entry.key).toUpperCase();
+    const visibility = asTrimmedString(entry.visibility).toLowerCase();
+    if (visibility === 'plain' && isSensitiveEnvironmentKey(key)) {
+      addCheck({
+        code: `${normalizedProvider}.visibility.${key.toLowerCase()}`,
+        status: 'warn',
+        key,
+        message: `${key} is marked plain; consider secret/masked visibility.`
+      });
+    }
+  }
+
+  return finalizeEnvironmentVerification(normalizedProvider, checks, recommendations);
+}
+
+function groupEnvironmentEntriesByProvider(entries = []) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const provider = asTrimmedString(entry.provider || 'generic').toLowerCase() || 'generic';
+    if (!groups.has(provider)) groups.set(provider, []);
+    groups.get(provider).push(entry);
+  }
+  if (!groups.size) {
+    groups.set('generic', []);
+  }
+  return groups;
+}
+
+function normalizeVerifyProbeMode(value = '') {
+  const normalized = asTrimmedString(value).toLowerCase();
+  if (ENV_VERIFY_PROBE_MODE_SET.has(normalized)) return normalized;
+  return 'syntax';
+}
+
+function findEnvironmentEntryValue(entries = [], keys = []) {
+  const keySet = new Set(keys.map((item) => asTrimmedString(item).toUpperCase()).filter(Boolean));
+  for (const entry of entries) {
+    const key = asTrimmedString(entry.key).toUpperCase();
+    const value = asTrimmedString(entry.value);
+    if (!keySet.has(key) || !value) continue;
+    return value;
+  }
+  return '';
+}
+
+async function probeHttpEndpoint({
+  url = '',
+  method = 'GET',
+  headers = {},
+  body = '',
+  timeoutMs = 4000
+}) {
+  const endpoint = asTrimmedString(url);
+  if (!endpoint) {
+    return {
+      reachable: false,
+      http_status: null,
+      error_code: 'endpoint.missing',
+      error_message: 'endpoint is required'
+    };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(endpoint, {
+      method,
+      headers,
+      body: body || undefined,
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    return {
+      reachable: true,
+      http_status: response.status,
+      ok: response.ok,
+      error_code: '',
+      error_message: ''
+    };
+  } catch (err) {
+    const isTimeout = err?.name === 'AbortError';
+    return {
+      reachable: false,
+      http_status: null,
+      ok: false,
+      error_code: isTimeout ? 'network.timeout' : 'network.error',
+      error_message: String(err?.message || err)
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function finalizeProviderConnectivityProbe({
+  provider = '',
+  endpoint = '',
+  reachable = false,
+  httpStatus = null,
+  status = 'warn',
+  message = '',
+  errorCode = '',
+  errorMessage = ''
+}) {
+  return {
+    provider,
+    endpoint_masked: endpoint ? maskSecretUrl(endpoint) : '',
+    reachable,
+    http_status: Number.isFinite(Number(httpStatus)) ? Number(httpStatus) : null,
+    status,
+    message: asTrimmedString(message),
+    error_code: asTrimmedString(errorCode),
+    error_message: asTrimmedString(errorMessage)
+  };
+}
+
+async function probeProviderConnectivity({
+  provider = '',
+  entries = [],
+  timeoutMs = 4000
+}) {
+  const normalizedProvider = asTrimmedString(provider || 'generic').toLowerCase() || 'generic';
+  const providerEntries = Array.isArray(entries) ? entries : [];
+
+  if (normalizedProvider === 'feishu') {
+    const webhook = findEnvironmentEntryValue(providerEntries, [
+      'FLOCKMESH_FEISHU_WEBHOOK_URL',
+      'FEISHU_WEBHOOK_URL'
+    ]);
+    const parsed = parseHttpUrl(webhook);
+    if (!parsed) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: webhook,
+        status: 'fail',
+        message: 'Feishu webhook URL missing or invalid.',
+        errorCode: 'feishu.webhook.invalid'
+      });
+    }
+
+    const probe = await probeHttpEndpoint({
+      url: parsed.toString(),
+      method: 'GET',
+      timeoutMs
+    });
+    if (!probe.reachable) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: parsed.toString(),
+        reachable: false,
+        httpStatus: probe.http_status,
+        status: 'fail',
+        message: 'Feishu endpoint is unreachable from runtime.',
+        errorCode: probe.error_code,
+        errorMessage: probe.error_message
+      });
+    }
+
+    return finalizeProviderConnectivityProbe({
+      provider: normalizedProvider,
+      endpoint: parsed.toString(),
+      reachable: true,
+      httpStatus: probe.http_status,
+      status: Number(probe.http_status) >= 500 ? 'warn' : 'pass',
+      message: Number(probe.http_status) >= 500
+        ? 'Feishu endpoint reachable but returned 5xx.'
+        : 'Feishu endpoint reachable.'
+    });
+  }
+
+  if (normalizedProvider === 'langfuse') {
+    const host = findEnvironmentEntryValue(providerEntries, ['LANGFUSE_HOST']);
+    const parsed = parseHttpUrl(host);
+    if (!parsed) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: host,
+        status: 'fail',
+        message: 'LANGFUSE_HOST missing or invalid.',
+        errorCode: 'langfuse.host.invalid'
+      });
+    }
+
+    const healthEndpoint = new URL('/api/public/health', parsed).toString();
+    const probe = await probeHttpEndpoint({
+      url: healthEndpoint,
+      method: 'GET',
+      timeoutMs
+    });
+    if (!probe.reachable) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: healthEndpoint,
+        reachable: false,
+        httpStatus: probe.http_status,
+        status: 'fail',
+        message: 'Langfuse host is unreachable from runtime.',
+        errorCode: probe.error_code,
+        errorMessage: probe.error_message
+      });
+    }
+
+    return finalizeProviderConnectivityProbe({
+      provider: normalizedProvider,
+      endpoint: healthEndpoint,
+      reachable: true,
+      httpStatus: probe.http_status,
+      status: Number(probe.http_status) >= 500 ? 'warn' : 'pass',
+      message: Number(probe.http_status) >= 500
+        ? 'Langfuse endpoint reachable but returned 5xx.'
+        : 'Langfuse endpoint reachable.'
+    });
+  }
+
+  if (normalizedProvider === 'claude_code') {
+    const apiKey = findEnvironmentEntryValue(providerEntries, ['ANTHROPIC_API_KEY']);
+    const baseUrlRaw = findEnvironmentEntryValue(providerEntries, ['ANTHROPIC_BASE_URL']) || 'https://api.anthropic.com';
+    const baseUrl = parseHttpUrl(baseUrlRaw);
+    if (!apiKey || !baseUrl) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: baseUrlRaw,
+        status: 'fail',
+        message: 'ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL is invalid.',
+        errorCode: 'claude_code.credentials.invalid'
+      });
+    }
+
+    const modelsEndpoint = new URL('/v1/models', baseUrl).toString();
+    const probe = await probeHttpEndpoint({
+      url: modelsEndpoint,
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      timeoutMs
+    });
+    if (!probe.reachable) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: modelsEndpoint,
+        reachable: false,
+        httpStatus: probe.http_status,
+        status: 'fail',
+        message: 'Claude API endpoint is unreachable.',
+        errorCode: probe.error_code,
+        errorMessage: probe.error_message
+      });
+    }
+
+    const authFailure = [401, 403].includes(Number(probe.http_status));
+    return finalizeProviderConnectivityProbe({
+      provider: normalizedProvider,
+      endpoint: modelsEndpoint,
+      reachable: true,
+      httpStatus: probe.http_status,
+      status: authFailure ? 'fail' : (Number(probe.http_status) >= 500 ? 'warn' : 'pass'),
+      message: authFailure
+        ? 'Claude credentials rejected by remote endpoint.'
+        : (Number(probe.http_status) >= 500
+          ? 'Claude endpoint reachable but returned 5xx.'
+          : 'Claude endpoint reachable.')
+    });
+  }
+
+  if (normalizedProvider === 'codex') {
+    const apiKey = findEnvironmentEntryValue(providerEntries, ['OPENAI_API_KEY']);
+    const baseUrlRaw = findEnvironmentEntryValue(providerEntries, ['OPENAI_BASE_URL']) || 'https://api.openai.com/v1';
+    const baseUrl = parseHttpUrl(baseUrlRaw);
+    if (!apiKey || !baseUrl) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: baseUrlRaw,
+        status: 'fail',
+        message: 'OPENAI_API_KEY or OPENAI_BASE_URL is invalid.',
+        errorCode: 'codex.credentials.invalid'
+      });
+    }
+
+    const modelsEndpoint = new URL('/models', baseUrl).toString();
+    const probe = await probeHttpEndpoint({
+      url: modelsEndpoint,
+      method: 'GET',
+      headers: {
+        authorization: `Bearer ${apiKey}`
+      },
+      timeoutMs
+    });
+    if (!probe.reachable) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint: modelsEndpoint,
+        reachable: false,
+        httpStatus: probe.http_status,
+        status: 'fail',
+        message: 'OpenAI endpoint is unreachable.',
+        errorCode: probe.error_code,
+        errorMessage: probe.error_message
+      });
+    }
+
+    const authFailure = [401, 403].includes(Number(probe.http_status));
+    return finalizeProviderConnectivityProbe({
+      provider: normalizedProvider,
+      endpoint: modelsEndpoint,
+      reachable: true,
+      httpStatus: probe.http_status,
+      status: authFailure ? 'fail' : (Number(probe.http_status) >= 500 ? 'warn' : 'pass'),
+      message: authFailure
+        ? 'OpenAI credentials rejected by remote endpoint.'
+        : (Number(probe.http_status) >= 500
+          ? 'OpenAI endpoint reachable but returned 5xx.'
+          : 'OpenAI endpoint reachable.')
+    });
+  }
+
+  if (normalizedProvider === 'aws') {
+    const region = findEnvironmentEntryValue(providerEntries, ['AWS_REGION']) || 'us-east-1';
+    const endpoint = `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15`;
+    const probe = await probeHttpEndpoint({
+      url: endpoint,
+      method: 'GET',
+      timeoutMs
+    });
+    if (!probe.reachable) {
+      return finalizeProviderConnectivityProbe({
+        provider: normalizedProvider,
+        endpoint,
+        reachable: false,
+        httpStatus: probe.http_status,
+        status: 'fail',
+        message: 'AWS STS endpoint is unreachable.',
+        errorCode: probe.error_code,
+        errorMessage: probe.error_message
+      });
+    }
+
+    return finalizeProviderConnectivityProbe({
+      provider: normalizedProvider,
+      endpoint,
+      reachable: true,
+      httpStatus: probe.http_status,
+      status: Number(probe.http_status) >= 500 ? 'warn' : 'pass',
+      message: Number(probe.http_status) >= 500
+        ? 'AWS STS endpoint reachable but returned 5xx.'
+        : 'AWS STS endpoint reachable.'
+    });
+  }
+
+  return finalizeProviderConnectivityProbe({
+    provider: normalizedProvider,
+    status: 'skip',
+    message: 'Connectivity probe is not defined for this provider.'
+  });
+}
+
+async function probeEnvironmentSetConnectivity(environmentSet = {}, { timeoutMs = 4000 } = {}) {
+  const entries = Array.isArray(environmentSet.entries) ? environmentSet.entries : [];
+  const groups = groupEnvironmentEntriesByProvider(entries);
+  const providers = [];
+
+  for (const [provider, providerEntries] of groups.entries()) {
+    // Sequential probing keeps outbound verification requests predictable.
+    const result = await probeProviderConnectivity({
+      provider,
+      entries: providerEntries,
+      timeoutMs
+    });
+    providers.push(result);
+  }
+
+  const summary = providers.reduce((acc, item) => {
+    acc.total += 1;
+    if (item.status === 'pass') acc.pass += 1;
+    if (item.status === 'warn') acc.warn += 1;
+    if (item.status === 'fail') acc.fail += 1;
+    if (item.status === 'skip') acc.skip += 1;
+    return acc;
+  }, { total: 0, pass: 0, warn: 0, fail: 0, skip: 0 });
+
+  const status = summary.fail > 0 ? 'fail' : summary.warn > 0 ? 'warn' : 'pass';
+  return {
+    status,
+    summary,
+    providers
+  };
+}
+
+function verifyEnvironmentSet(environmentSet = {}) {
+  const entries = Array.isArray(environmentSet.entries) ? environmentSet.entries : [];
+  const groups = groupEnvironmentEntriesByProvider(entries);
+
+  const providers = Array.from(groups.entries())
+    .map(([provider, list]) => buildEnvironmentProviderVerification(provider, list))
+    .sort((a, b) => a.provider.localeCompare(b.provider));
+
+  const providerSummary = providers.reduce((acc, item) => {
+    acc.total += 1;
+    acc[item.status] += 1;
+    return acc;
+  }, { total: 0, pass: 0, warn: 0, fail: 0 });
+
+  const totalChecks = providers.reduce((acc, item) => acc + item.summary.total_checks, 0);
+  const overallStatus = providerSummary.fail > 0 ? 'fail' : providerSummary.warn > 0 ? 'warn' : 'pass';
+  const recommendations = Array.from(
+    new Set(
+      providers.flatMap((item) => Array.isArray(item.recommendations) ? item.recommendations : [])
+    )
+  );
+
+  const findProviderStatus = (providerName) => {
+    const item = providers.find((provider) => provider.provider === providerName);
+    if (!item) return 'missing';
+    return item.status;
+  };
+
+  return {
+    set_id: asTrimmedString(environmentSet.id),
+    workspace_id: asTrimmedString(environmentSet.workspace_id),
+    mode: normalizeAccessMode(environmentSet.mode),
+    scope: normalizeEnvironmentScope(environmentSet.scope),
+    status: overallStatus,
+    summary: {
+      total_providers: providerSummary.total,
+      total_checks: totalChecks,
+      pass: providerSummary.pass,
+      warn: providerSummary.warn,
+      fail: providerSummary.fail
+    },
+    runtime_readiness: {
+      feishu_delivery: ['pass', 'warn'].includes(findProviderStatus('feishu')),
+      langfuse_observability: ['pass', 'warn'].includes(findProviderStatus('langfuse')),
+      claude_code_bridge: ['pass', 'warn'].includes(findProviderStatus('claude_code')),
+      codex_bridge: ['pass', 'warn'].includes(findProviderStatus('codex'))
+    },
+    providers,
+    recommendations
+  };
+}
+
+function parseIsoTimeMs(value = '') {
+  const ms = Date.parse(String(value || ''));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function normalizeReadinessStatus(value = '') {
+  const normalized = asTrimmedString(value).toLowerCase();
+  if (normalized === 'pass') return 'pass';
+  if (normalized === 'fail') return 'fail';
+  return 'warn';
+}
+
+function readinessScoreFactor(status = 'warn') {
+  const normalized = normalizeReadinessStatus(status);
+  if (normalized === 'pass') return 1;
+  if (normalized === 'fail') return 0;
+  return 0.6;
+}
+
+function buildWorkstationReadinessScore(stages = []) {
+  const normalizedStages = Array.isArray(stages) ? stages : [];
+  let maxPoints = 0;
+  let points = 0;
+  let pass = 0;
+  let warn = 0;
+  let fail = 0;
+  let requiredFail = 0;
+
+  for (const stage of normalizedStages) {
+    const weight = Math.max(Number(stage?.weight || 0), 0);
+    const status = normalizeReadinessStatus(stage?.status || 'warn');
+    maxPoints += weight;
+    points += weight * readinessScoreFactor(status);
+    if (status === 'pass') pass += 1;
+    if (status === 'warn') warn += 1;
+    if (status === 'fail') {
+      fail += 1;
+      if (stage?.required !== false) {
+        requiredFail += 1;
+      }
+    }
+  }
+
+  const roundedPoints = Number(points.toFixed(1));
+  const ratio = maxPoints > 0 ? roundedPoints / maxPoints : 0;
+  const percent = Number((ratio * 100).toFixed(1));
+  const grade = percent >= 85
+    ? 'ready'
+    : percent >= 70
+      ? 'near_ready'
+      : percent >= 40
+        ? 'bootstrapping'
+        : 'blocked';
+  const status = requiredFail > 0
+    ? 'fail'
+    : percent >= 85
+      ? 'pass'
+      : 'warn';
+
+  return {
+    status,
+    grade,
+    points: roundedPoints,
+    max_points: maxPoints,
+    percent,
+    summary: {
+      pass,
+      warn,
+      fail,
+      required_fail: requiredFail
+    }
+  };
+}
+
+function buildWorkstationReadinessNextActions({
+  accessStage = null,
+  environmentStage = null,
+  bridgeStage = null,
+  deliveryStage = null,
+  sessionStage = null,
+  selectedEnvironmentSet = null
+} = {}) {
+  const actions = [];
+  const pushAction = (action) => {
+    if (!action || typeof action !== 'object') return;
+    const actionId = asTrimmedString(action.action_id);
+    if (!actionId) return;
+    if (actions.some((item) => item.action_id === actionId)) return;
+    actions.push({
+      action_id: actionId,
+      title: asTrimmedString(action.title),
+      description: asTrimmedString(action.description),
+      cta: asTrimmedString(action.cta)
+    });
+  };
+
+  if (normalizeReadinessStatus(accessStage?.status) === 'fail') {
+    pushAction({
+      action_id: 'assign_workspace_role',
+      title: 'Assign workspace role',
+      description: 'Current actor is not assigned in this workspace.',
+      cta: 'POST /v0/access/role-bindings'
+    });
+  } else if (accessStage?.details?.bootstrap_available) {
+    pushAction({
+      action_id: 'bootstrap_workspace_roles',
+      title: 'Bootstrap workspace permissions',
+      description: 'No role bindings exist yet. Grant workspace_admin/operator/auditor for first admin.',
+      cta: 'POST /v0/access/role-bindings'
+    });
+  }
+
+  if (normalizeReadinessStatus(environmentStage?.status) === 'fail') {
+    pushAction({
+      action_id: 'create_environment_set',
+      title: 'Create active environment set',
+      description: 'Add provider keys (Feishu, Claude/Codex, Langfuse, cloud) and mark set active.',
+      cta: 'POST /v0/environments/sets'
+    });
+  } else if (normalizeReadinessStatus(environmentStage?.status) === 'warn') {
+    pushAction({
+      action_id: 'verify_environment_set',
+      title: 'Fix environment warnings',
+      description: 'Run verification and resolve key format/provider warnings before first production run.',
+      cta: 'POST /v0/environments/sets/{set_id}/verify'
+    });
+  }
+
+  if (normalizeReadinessStatus(bridgeStage?.status) !== 'pass') {
+    if (!bridgeStage?.details?.workspace_path_set) {
+      pushAction({
+        action_id: 'set_workspace_folder',
+        title: 'Set workspace folder',
+        description: 'Workspace folder is required for IDE agent bridge over local project context.',
+        cta: 'GET /v0/integrations/agent-ide-profile?workspace_path=...'
+      });
+    }
+    if (!bridgeStage?.details?.bridge_credentials_ready) {
+      pushAction({
+        action_id: 'add_bridge_credentials',
+        title: 'Add Claude/Codex credentials',
+        description: 'Configure ANTHROPIC_API_KEY or OPENAI_API_KEY in active environment set.',
+        cta: 'POST /v0/environments/sets/{set_id}/entries'
+      });
+    }
+  }
+
+  if (normalizeReadinessStatus(deliveryStage?.status) !== 'pass') {
+    if (deliveryStage?.details?.environment_has_feishu_webhook && selectedEnvironmentSet?.id) {
+      pushAction({
+        action_id: 'apply_env_to_runtime',
+        title: 'Apply active env set to runtime',
+        description: 'Feishu webhook exists in environment set but is not applied to runtime yet.',
+        cta: `POST /v0/environments/sets/${selectedEnvironmentSet.id}/apply-runtime`
+      });
+    } else {
+      pushAction({
+        action_id: 'configure_feishu_webhook',
+        title: 'Configure Feishu delivery',
+        description: 'Set a Feishu webhook for approval/result notifications.',
+        cta: 'POST /v0/integrations/feishu/webhook'
+      });
+    }
+  }
+
+  const sessionTotal = Number(sessionStage?.details?.sessions?.total || 0);
+  const pendingApprovals = Number(sessionStage?.details?.sessions?.pending_approvals || 0);
+  if (sessionTotal < 1) {
+    pushAction({
+      action_id: 'start_first_run',
+      title: 'Start first run',
+      description: 'Create your first session to unlock timeline and audit review.',
+      cta: 'POST /v0/quickstart/one-person'
+    });
+  } else if (pendingApprovals > 0) {
+    pushAction({
+      action_id: 'resolve_pending_approvals',
+      title: 'Resolve pending approvals',
+      description: `There are ${pendingApprovals} pending approval actions in recent sessions.`,
+      cta: 'POST /v0/runs/{run_id}/approvals'
+    });
+  }
+
+  if (!actions.length) {
+    pushAction({
+      action_id: 'inspect_session_evidence',
+      title: 'Inspect session evidence',
+      description: 'Review events and immutable audit to validate your workflow baseline.',
+      cta: 'GET /v0/sessions/{session_id}?include_evidence=true'
+    });
+  }
+
+  return actions.slice(0, 8);
+}
+
+async function buildWorkstationReadinessSnapshot({
+  app,
+  request,
+  workspaceId = '',
+  actorId = '',
+  modeFilter = '',
+  workspacePath = '',
+  includeProbe = false,
+  probeTimeoutMs = 2200,
+  rootDir = ''
+}) {
+  const normalizedWorkspaceId = asTrimmedString(workspaceId);
+  const normalizedActorId = asTrimmedString(actorId);
+  const normalizedMode = asTrimmedString(modeFilter);
+  const normalizedWorkspacePath = asTrimmedString(workspacePath);
+  const normalizedRootDir = path.resolve(String(rootDir || defaultProjectRoot));
+  const generatedAt = nowIso();
+
+  const workspaceRoleBindings = listWorkspaceRoleBindings(app, normalizedWorkspaceId);
+  const bootstrapAvailable = workspaceRoleBindings.length < 1;
+  const actorAssigned = bootstrapAvailable || actorHasAnyWorkspaceRole({
+    app,
+    workspaceId: normalizedWorkspaceId,
+    actorId: normalizedActorId
+  });
+  const resolvedPermissions = resolveActorPermissions({
+    app,
+    workspaceId: normalizedWorkspaceId,
+    actorId: normalizedActorId
+  });
+  const permissionChecks = {
+    environment_manage: bootstrapAvailable || resolvedPermissions.permissions.includes('environment.manage'),
+    role_manage: bootstrapAvailable || resolvedPermissions.permissions.includes('role.manage'),
+    run_execute: bootstrapAvailable || resolvedPermissions.permissions.includes('run.execute'),
+    session_read: bootstrapAvailable || resolvedPermissions.permissions.includes('session.read'),
+    audit_read: bootstrapAvailable || resolvedPermissions.permissions.includes('audit.read'),
+    approval_resolve: bootstrapAvailable || resolvedPermissions.permissions.includes('approval.resolve')
+  };
+
+  const accessStageStatus = !actorAssigned
+    ? 'fail'
+    : bootstrapAvailable
+      ? 'warn'
+      : permissionChecks.run_execute && permissionChecks.session_read
+        ? 'pass'
+        : 'warn';
+  const accessStage = {
+    id: 'access',
+    title: 'Access Control',
+    required: true,
+    weight: WORKSTATION_READINESS_STAGE_WEIGHT.access,
+    status: accessStageStatus,
+    summary: !actorAssigned
+      ? 'Actor is not assigned in workspace role bindings.'
+      : bootstrapAvailable
+        ? 'Workspace has no role bindings yet. First admin bootstrap is available.'
+        : permissionChecks.run_execute && permissionChecks.session_read
+          ? 'Actor has baseline execute/read permissions.'
+          : 'Actor is assigned but missing part of execute/read permissions.',
+    details: {
+      bootstrap_available: bootstrapAvailable,
+      actor_assigned: actorAssigned,
+      roles: resolvedPermissions.roles,
+      permissions: resolvedPermissions.permissions,
+      permission_checks: permissionChecks,
+      workspace_role_binding_count: workspaceRoleBindings.length
+    }
+  };
+
+  const activeEnvironmentModePage = normalizedMode
+    ? app.stateDb.listActiveEnvironmentSets({
+      workspaceId: normalizedWorkspaceId,
+      mode: normalizedMode,
+      limit: 120,
+      offset: 0
+    })
+    : null;
+  const activeEnvironmentPage = app.stateDb.listActiveEnvironmentSets({
+    workspaceId: normalizedWorkspaceId,
+    limit: 120,
+    offset: 0
+  });
+  const selectedEnvironmentSet = activeEnvironmentModePage?.items?.[0]
+    || activeEnvironmentPage.items?.[0]
+    || null;
+  const environmentReport = selectedEnvironmentSet
+    ? verifyEnvironmentSet(selectedEnvironmentSet)
+    : null;
+  const environmentConnectivity = (includeProbe && selectedEnvironmentSet)
+    ? await probeEnvironmentSetConnectivity(selectedEnvironmentSet, { timeoutMs: probeTimeoutMs })
+    : null;
+  const environmentStageStatus = selectedEnvironmentSet
+    ? normalizeReadinessStatus(environmentReport?.status || 'warn')
+    : 'fail';
+  const environmentStage = {
+    id: 'environment',
+    title: 'Environment Center',
+    required: true,
+    weight: WORKSTATION_READINESS_STAGE_WEIGHT.environment,
+    status: environmentStageStatus,
+    summary: !selectedEnvironmentSet
+      ? 'No active environment set found for this workspace/mode.'
+      : `Active set ${selectedEnvironmentSet.name} verification is ${String(environmentReport?.status || 'warn').toUpperCase()}.`,
+    details: {
+      mode_filter: normalizedMode || 'all',
+      selected_set: selectedEnvironmentSet ? sanitizeEnvironmentSet(selectedEnvironmentSet) : null,
+      active_sets_total: Number(activeEnvironmentPage.total || 0),
+      active_sets_mode_total: normalizedMode
+        ? Number(activeEnvironmentModePage?.total || 0)
+        : Number(activeEnvironmentPage.total || 0),
+      report: environmentReport,
+      ...(environmentConnectivity ? { connectivity: environmentConnectivity } : {})
+    }
+  };
+
+  const publicBaseUrl = resolvePublicBaseUrl({ request, app });
+  const allowlists = app.mcpAllowlists
+    .map((doc) => ({
+      version: doc.version,
+      name: doc.name,
+      rules: doc.rules.filter((rule) => {
+        if (rule.workspace_id !== normalizedWorkspaceId) return false;
+        return true;
+      })
+    }))
+    .filter((doc) => doc.rules.length > 0);
+  const bridgeProfile = buildAgentIdeBridgeProfile({
+    workspaceId: normalizedWorkspaceId,
+    actorId: normalizedActorId,
+    workspacePath: normalizedWorkspacePath,
+    rootDir: normalizedRootDir,
+    allowlists,
+    mcpBridgeBearerTokenEnabled: Boolean(app.mcpBridgeBearerToken),
+    streamableHttpUrl: `${publicBaseUrl}/v0/mcp/stream`,
+    protocolVersion: MCP_BRIDGE_PROTOCOL_VERSION
+  });
+  const claudeBridgeReady = environmentReport?.runtime_readiness?.claude_code_bridge === true;
+  const codexBridgeReady = environmentReport?.runtime_readiness?.codex_bridge === true;
+  const bridgeCredentialsReady = claudeBridgeReady || codexBridgeReady;
+  const workspacePathSet = Boolean(normalizedWorkspacePath);
+  const bridgeStageStatus = bridgeCredentialsReady && workspacePathSet
+    ? 'pass'
+    : bridgeCredentialsReady || workspacePathSet
+      ? 'warn'
+      : 'fail';
+  const bridgeStage = {
+    id: 'bridge',
+    title: 'Agent IDE Bridge',
+    required: true,
+    weight: WORKSTATION_READINESS_STAGE_WEIGHT.bridge,
+    status: bridgeStageStatus,
+    summary: bridgeStageStatus === 'pass'
+      ? 'Bridge credentials and workspace folder are both ready for Claude/Codex.'
+      : bridgeStageStatus === 'warn'
+        ? 'Bridge is partially ready. Complete missing folder or credentials.'
+        : 'Bridge is blocked. Configure workspace folder and Claude/Codex credentials.',
+    details: {
+      workspace_path_set: workspacePathSet,
+      workspace_path: normalizedWorkspacePath || null,
+      bridge_credentials_ready: bridgeCredentialsReady,
+      claude_code_ready: claudeBridgeReady,
+      codex_ready: codexBridgeReady,
+      streamable_http_url: bridgeProfile?.mcp_bridge?.streamable_http?.url || '',
+      command: bridgeProfile?.mcp_bridge?.command || '',
+      args: bridgeProfile?.mcp_bridge?.args || []
+    }
+  };
+
+  const feishuStatus = resolveFeishuConnectionStatus(app);
+  const environmentHasFeishuWebhook = environmentReport?.runtime_readiness?.feishu_delivery === true;
+  const deliveryStageStatus = feishuStatus.connected
+    ? 'pass'
+    : environmentHasFeishuWebhook
+      ? 'warn'
+      : 'warn';
+  const deliveryStage = {
+    id: 'delivery',
+    title: 'Feishu Delivery',
+    required: false,
+    weight: WORKSTATION_READINESS_STAGE_WEIGHT.delivery,
+    status: deliveryStageStatus,
+    summary: feishuStatus.connected
+      ? 'Feishu webhook is connected in runtime.'
+      : environmentHasFeishuWebhook
+        ? 'Feishu webhook exists in environment set but not active in runtime yet.'
+        : 'Feishu webhook not configured. Delivery will run in stub mode.',
+    details: {
+      connected: feishuStatus.connected,
+      source: feishuStatus.source,
+      delivery_mode: feishuStatus.delivery_mode,
+      webhook_masked: feishuStatus.webhook_masked,
+      environment_has_feishu_webhook: environmentHasFeishuWebhook
+    }
+  };
+
+  const runSummary = app.stateDb.summarizeRunsByWorkspace({
+    workspaceId: normalizedWorkspaceId
+  });
+  const sessionSummary = {
+    total: Number(runSummary.total || 0),
+    pending_approvals: Number(runSummary.by_status?.waiting_approval || 0),
+    completed: Number(runSummary.by_status?.completed || 0),
+    by_status: runSummary.by_status && typeof runSummary.by_status === 'object'
+      ? runSummary.by_status
+      : {}
+  };
+  const sessionStageStatus = !permissionChecks.session_read
+    ? 'fail'
+    : sessionSummary.total < 1
+      ? 'warn'
+      : sessionSummary.pending_approvals > 0 || !permissionChecks.audit_read
+        ? 'warn'
+        : 'pass';
+  const sessionStage = {
+    id: 'session_audit',
+    title: 'Session Audit',
+    required: true,
+    weight: WORKSTATION_READINESS_STAGE_WEIGHT.session_audit,
+    status: sessionStageStatus,
+    summary: !permissionChecks.session_read
+      ? 'Actor cannot read sessions in this workspace.'
+      : sessionSummary.total < 1
+        ? 'No sessions yet. Start first run to unlock audit review.'
+        : sessionSummary.pending_approvals > 0
+          ? `${sessionSummary.pending_approvals} session(s) waiting approval.`
+          : !permissionChecks.audit_read
+            ? 'Session exists but actor lacks audit.read for evidence retrieval.'
+            : 'Session and audit review path is ready.',
+    details: {
+      permission_session_read: permissionChecks.session_read,
+      permission_audit_read: permissionChecks.audit_read,
+      sessions: sessionSummary
+    }
+  };
+
+  const stages = [
+    accessStage,
+    environmentStage,
+    bridgeStage,
+    deliveryStage,
+    sessionStage
+  ];
+  const score = buildWorkstationReadinessScore(stages);
+  const nextActions = buildWorkstationReadinessNextActions({
+    accessStage,
+    environmentStage,
+    bridgeStage,
+    deliveryStage,
+    sessionStage,
+    selectedEnvironmentSet
+  });
+
+  return {
+    version: 'v0',
+    generated_at: generatedAt,
+    workspace_id: normalizedWorkspaceId,
+    actor_id: normalizedActorId,
+    mode_filter: normalizedMode || 'all',
+    include_probe: includeProbe,
+    probe_timeout_ms: probeTimeoutMs,
+    score,
+    stages,
+    next_actions: nextActions,
+    context: {
+      bootstrap_available: bootstrapAvailable,
+      roles: resolvedPermissions.roles,
+      permissions: resolvedPermissions.permissions,
+      selected_environment_set_id: selectedEnvironmentSet?.id || '',
+      feishu_connected: feishuStatus.connected,
+      total_sessions: sessionSummary.total
+    },
+    feishu_status: {
+      version: 'v0',
+      generated_at: generatedAt,
+      ...feishuStatus
+    },
+    bridge_profile: bridgeProfile
+  };
+}
+
+function parseEnvironmentTarget(rawTarget = '') {
+  const raw = asTrimmedString(rawTarget);
+  if (!raw) {
+    return {
+      has_target: false,
+      predicates: []
+    };
+  }
+
+  const tokens = raw
+    .split(',')
+    .map((item) => asTrimmedString(item))
+    .filter(Boolean);
+  const predicates = [];
+
+  for (const token of tokens) {
+    if (token === '*') {
+      predicates.push({ kind: 'all', value: '*' });
+      continue;
+    }
+
+    const index = token.indexOf(':');
+    if (index > 0) {
+      const kind = asTrimmedString(token.slice(0, index)).toLowerCase();
+      const value = asTrimmedString(token.slice(index + 1));
+      if (!value) continue;
+      if (kind === 'actor') {
+        predicates.push({ kind: 'actor', value });
+        continue;
+      }
+      if (kind === 'role') {
+        predicates.push({ kind: 'role', value: value.toLowerCase() });
+        continue;
+      }
+      if (kind === 'mode') {
+        predicates.push({ kind: 'mode', value: normalizeAccessMode(value) });
+        continue;
+      }
+      continue;
+    }
+
+    if (/^usr_[A-Za-z0-9_-]{4,128}$/.test(token)) {
+      predicates.push({ kind: 'actor', value: token });
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (ROLE_NAME_SET.has(lower)) {
+      predicates.push({ kind: 'role', value: lower });
+    }
+  }
+
+  return {
+    has_target: true,
+    predicates
+  };
+}
+
+function environmentEntryTargetMatches({
+  entry = {},
+  targetActorId = '',
+  targetRoles = [],
+  mode = ''
+}) {
+  const target = parseEnvironmentTarget(entry.target || '');
+  if (!target.has_target) return true;
+  if (!target.predicates.length) return false;
+
+  const actorId = asTrimmedString(targetActorId);
+  const roleSet = new Set(
+    (Array.isArray(targetRoles) ? targetRoles : [])
+      .map((role) => asTrimmedString(role).toLowerCase())
+      .filter(Boolean)
+  );
+  const normalizedMode = normalizeAccessMode(mode || '');
+
+  for (const predicate of target.predicates) {
+    if (predicate.kind === 'all') return true;
+    if (predicate.kind === 'actor' && actorId && actorId === predicate.value) return true;
+    if (predicate.kind === 'role' && roleSet.has(predicate.value)) return true;
+    if (predicate.kind === 'mode' && normalizedMode && normalizedMode === predicate.value) return true;
+  }
+  return false;
+}
+
+function buildEffectiveEnvironmentEntries({
+  app,
+  workspaceId = '',
+  targetActorId = '',
+  modeFilter = ''
+}) {
+  const resolvedTarget = resolveActorPermissions({
+    app,
+    workspaceId,
+    actorId: targetActorId
+  });
+  const targetRoles = resolvedTarget.roles;
+  const sets = app.stateDb.listEnvironmentSets({
+    workspaceId,
+    limit: 5000,
+    offset: 0
+  }).items
+    .filter((item) => asTrimmedString(item.status || '') === 'active')
+    .filter((item) => !modeFilter || asTrimmedString(item.mode) === modeFilter)
+    .sort((a, b) => parseIsoTimeMs(a.updated_at) - parseIsoTimeMs(b.updated_at));
+
+  const byEntry = new Map();
+  for (const set of sets) {
+    const entries = Array.isArray(set.entries) ? set.entries : [];
+    for (const entry of entries) {
+      if (!environmentEntryTargetMatches({
+        entry,
+        targetActorId,
+        targetRoles,
+        mode: set.mode
+      })) {
+        continue;
+      }
+
+      const provider = asTrimmedString(entry.provider || 'generic').toLowerCase() || 'generic';
+      const key = asTrimmedString(entry.key).toUpperCase();
+      const dedupeKey = `${provider}::${key}`;
+      byEntry.set(dedupeKey, {
+        ...entry,
+        provider,
+        key,
+        source_set_id: asTrimmedString(set.id),
+        source_set_name: asTrimmedString(set.name),
+        source_set_scope: asTrimmedString(set.scope),
+        source_set_mode: asTrimmedString(set.mode),
+        source_set_status: asTrimmedString(set.status),
+        source_set_updated_at: asTrimmedString(set.updated_at)
+      });
+    }
+  }
+
+  const items = Array.from(byEntry.values()).sort((a, b) => {
+    const providerDiff = a.provider.localeCompare(b.provider);
+    if (providerDiff !== 0) return providerDiff;
+    return a.key.localeCompare(b.key);
+  });
+
+  return {
+    target_roles: targetRoles,
+    matched_sets: sets.length,
+    items
+  };
+}
+
+function sanitizeEffectiveEnvironmentEntry(entry = {}, { includePlainValues = false } = {}) {
+  const sanitized = sanitizeEnvironmentEntry(entry, { includeValue: includePlainValues });
+  return {
+    ...sanitized,
+    source: {
+      set_id: asTrimmedString(entry.source_set_id),
+      set_name: asTrimmedString(entry.source_set_name),
+      scope: asTrimmedString(entry.source_set_scope),
+      mode: asTrimmedString(entry.source_set_mode),
+      status: asTrimmedString(entry.source_set_status),
+      updated_at: asTrimmedString(entry.source_set_updated_at)
+    }
+  };
+}
+
+function listWorkspaceRoleBindings(app, workspaceId = '') {
+  const targetWorkspace = asTrimmedString(workspaceId);
+  if (!targetWorkspace) return [];
+
+  return Array.from(app.store.roleBindings.values())
+    .filter((binding) => asTrimmedString(binding.workspace_id) === targetWorkspace);
+}
+
+function workspaceHasRoleBindings(app, workspaceId = '') {
+  return listWorkspaceRoleBindings(app, workspaceId).length > 0;
+}
+
+function listActorRoleBindings({
+  app,
+  workspaceId = '',
+  actorId = ''
+}) {
+  const targetWorkspace = asTrimmedString(workspaceId);
+  const targetActor = asTrimmedString(actorId);
+  if (!targetWorkspace || !targetActor) return [];
+
+  return listWorkspaceRoleBindings(app, targetWorkspace)
+    .filter((binding) => asTrimmedString(binding.actor_id) === targetActor);
+}
+
+function actorHasAnyWorkspaceRole({
+  app,
+  workspaceId = '',
+  actorId = ''
+}) {
+  return listActorRoleBindings({ app, workspaceId, actorId }).length > 0;
+}
+
+function resolveActorPermissions({
+  app,
+  workspaceId = '',
+  actorId = ''
+}) {
+  const roles = Array.from(
+    new Set(
+      listActorRoleBindings({
+        app,
+        workspaceId,
+        actorId
+      })
+        .map((binding) => asTrimmedString(binding.role))
+        .filter((role) => ROLE_NAME_SET.has(role))
+    )
+  ).sort();
+
+  const permissions = Array.from(
+    new Set(
+      roles.flatMap((role) => ROLE_PERMISSION_LIBRARY[role] || [])
+    )
+  ).sort();
+
+  return {
+    workspace_id: asTrimmedString(workspaceId),
+    actor_id: asTrimmedString(actorId),
+    roles,
+    permissions
+  };
+}
+
+function actorHasPermission({
+  app,
+  workspaceId = '',
+  actorId = '',
+  permission = ''
+}) {
+  const normalizedPermission = asTrimmedString(permission);
+  if (!normalizedPermission) return false;
+
+  const resolved = resolveActorPermissions({
+    app,
+    workspaceId,
+    actorId
+  });
+  return resolved.permissions.includes(normalizedPermission);
+}
+
+function ensureActorPermission({
+  app,
+  request,
+  workspaceId = '',
+  permission = '',
+  allowWorkspaceBootstrap = false
+}) {
+  const actorIdentity = resolveRequestActorId(request, {
+    fallbackActorId: app.trustedDefaultActorId
+  });
+  if (!actorIdentity.ok) {
+    return actorIdentity;
+  }
+
+  const targetWorkspace = asTrimmedString(workspaceId);
+  if (!targetWorkspace) {
+    return {
+      ok: false,
+      errorCode: 400,
+      message: 'workspace_id is required for permission check'
+    };
+  }
+
+  if (
+    allowWorkspaceBootstrap &&
+    !workspaceHasRoleBindings(app, targetWorkspace)
+  ) {
+    return {
+      ok: true,
+      actor_id: actorIdentity.actor_id,
+      bootstrap: true
+    };
+  }
+
+  if (!actorHasPermission({
+    app,
+    workspaceId: targetWorkspace,
+    actorId: actorIdentity.actor_id,
+    permission
+  })) {
+    return {
+      ok: false,
+      errorCode: 403,
+      message: `Actor lacks permission: ${permission}`
+    };
+  }
+
+  return {
+    ok: true,
+    actor_id: actorIdentity.actor_id,
+    bootstrap: false
+  };
+}
+
+function bootstrapWorkspaceRoleBindings({
+  app,
+  workspaceId = '',
+  ownerActorId = ''
+}) {
+  const workspace = asTrimmedString(workspaceId);
+  const actorId = asTrimmedString(ownerActorId);
+  if (!workspace || !actorId) return [];
+  if (!ACTOR_ID_PATTERN.test(actorId)) return [];
+  if (workspaceHasRoleBindings(app, workspace)) return [];
+
+  const now = nowIso();
+  const bootstrapRoles = ['workspace_admin', 'operator', 'auditor'];
+  const created = [];
+
+  for (const role of bootstrapRoles) {
+    const binding = {
+      id: makeId('rlb'),
+      workspace_id: workspace,
+      actor_id: actorId,
+      role,
+      source: 'workspace_bootstrap',
+      created_at: now,
+      updated_at: now
+    };
+    app.store.roleBindings.set(binding.id, binding);
+    app.stateDb.saveRoleBinding(binding);
+    created.push(binding);
+  }
+
+  return created;
+}
+
+function resolveFeishuWebhookFromEnvironmentSet(environmentSet = {}) {
+  const entries = Array.isArray(environmentSet.entries) ? environmentSet.entries : [];
+  for (const entry of entries) {
+    const provider = asTrimmedString(entry.provider).toLowerCase();
+    const key = asTrimmedString(entry.key).toUpperCase();
+    const value = asTrimmedString(entry.value);
+    if (!value) continue;
+
+    if (provider === 'feishu') {
+      return value;
+    }
+    if (key === 'FLOCKMESH_FEISHU_WEBHOOK_URL' || key === 'FEISHU_WEBHOOK_URL') {
+      return value;
+    }
+  }
+  return '';
 }
 
 function actor(type, id) {
@@ -179,6 +2013,211 @@ function findBindingForAgent(store, agentId, workspaceId, capability) {
   return null;
 }
 
+function makeIntentFailureResult({
+  intent,
+  connectorId = '',
+  connectorBindingId = '',
+  reasonCode = 'action.execute.error',
+  message = 'Intent execution failed'
+}) {
+  return {
+    action_intent_id: intent.id,
+    capability: intent.capability,
+    status: 'failed',
+    deduped: false,
+    reason_code: reasonCode,
+    message,
+    ...(connectorId ? { connector_id: connectorId } : {}),
+    ...(connectorBindingId ? { connector_binding_id: connectorBindingId } : {}),
+    executed_at: nowIso()
+  };
+}
+
+async function invokeIntentViaConnector({ app, run, intent }) {
+  const bindingId = String(intent.connector_binding_id || '').trim();
+  if (!bindingId) return null;
+
+  const binding = findBindingById(app, bindingId);
+  if (!binding || binding.status !== 'active') {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorBindingId: bindingId,
+        reasonCode: 'connector.binding.unavailable',
+        message: 'Connector binding is missing or inactive'
+      })
+    };
+  }
+
+  if (binding.workspace_id !== run.workspace_id) {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorId: binding.connector_id,
+        connectorBindingId: binding.id,
+        reasonCode: 'connector.binding.workspace_mismatch',
+        message: 'Binding workspace does not match run workspace'
+      })
+    };
+  }
+
+  if (binding.agent_id && binding.agent_id !== run.agent_id) {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorId: binding.connector_id,
+        connectorBindingId: binding.id,
+        reasonCode: 'connector.binding.agent_mismatch',
+        message: 'Binding agent does not match run agent'
+      })
+    };
+  }
+
+  if (!Array.isArray(binding.scopes) || !binding.scopes.includes(intent.capability)) {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorId: binding.connector_id,
+        connectorBindingId: binding.id,
+        reasonCode: 'connector.binding.scope_mismatch',
+        message: `Capability ${intent.capability} is outside binding scope`
+      })
+    };
+  }
+
+  const connectorId = String(binding.connector_id || '').trim();
+  const adapter = app.connectorAdapters[connectorId];
+  if (!adapter) {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorId,
+        connectorBindingId: binding.id,
+        reasonCode: 'connector.adapter.missing',
+        message: `Connector adapter not implemented: ${connectorId}`
+      })
+    };
+  }
+
+  const manifest = app.connectorRegistry[connectorId];
+  if (manifest && Array.isArray(manifest.capabilities) && !manifest.capabilities.includes(intent.capability)) {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorId,
+        connectorBindingId: binding.id,
+        reasonCode: 'connector.manifest.capability_missing',
+        message: `Capability ${intent.capability} is not declared by connector manifest`
+      })
+    };
+  }
+
+  const rateLimitDecision = app.connectorRateLimiter.evaluate({
+    connectorId,
+    workspaceId: run.workspace_id
+  });
+  if (!rateLimitDecision.allowed) {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorId,
+        connectorBindingId: binding.id,
+        reasonCode: 'connector.invoke.rate_limited',
+        message: `Rate limited: retry_after_ms=${rateLimitDecision.retry_after_ms}`
+      })
+    };
+  }
+
+  const runtimeConfig = {
+    feishuWebhookUrl: resolveActiveFeishuWebhook(app).webhook_url
+  };
+  let adapterPayload;
+  let lastAdapterError;
+  let lastFailureReasonCode = '';
+  let attemptsUsed = 0;
+
+  for (let attempt = 1; attempt <= app.adapterRetryPolicy.max_attempts; attempt += 1) {
+    attemptsUsed = attempt;
+    try {
+      adapterPayload = await withTimeout(
+        () => adapter.invoke({
+          runId: run.id,
+          capability: intent.capability,
+          parameters: intent.parameters || {},
+          idempotencyKey: intent.idempotency_key,
+          attempt,
+          runtime: runtimeConfig
+        }),
+        app.adapterTimeoutMs
+      );
+      break;
+    } catch (err) {
+      if (err instanceof AdapterCapabilityError) {
+        return {
+          result: makeIntentFailureResult({
+            intent,
+            connectorId,
+            connectorBindingId: binding.id,
+            reasonCode: 'connector.adapter.capability_unsupported',
+            message: err.message
+          })
+        };
+      }
+
+      lastAdapterError = err;
+      lastFailureReasonCode = classifyAdapterFailureReason(err);
+      const retryDecision = buildAdapterRetryDecision({
+        attempt,
+        policy: app.adapterRetryPolicy,
+        sideEffect: intent.side_effect,
+        idempotencyKey: intent.idempotency_key,
+        errorReason: lastFailureReasonCode
+      });
+
+      if (!retryDecision.retry) break;
+
+      const delayMs = computeAdapterRetryDelayMs({
+        attempt,
+        policy: app.adapterRetryPolicy
+      });
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  if (!adapterPayload) {
+    return {
+      result: makeIntentFailureResult({
+        intent,
+        connectorId,
+        connectorBindingId: binding.id,
+        reasonCode: lastFailureReasonCode || 'connector.invoke.error',
+        message: String(lastAdapterError?.message || 'connector invoke failed')
+      })
+    };
+  }
+
+  return {
+    connectorId,
+    connectorBindingId: binding.id,
+    result: {
+      action_intent_id: intent.id,
+      connector_id: connectorId,
+      connector_binding_id: binding.id,
+      capability: intent.capability,
+      status: 'executed',
+      output: adapterPayload,
+      retry: {
+        attempts: attemptsUsed,
+        max_attempts: app.adapterRetryPolicy.max_attempts
+      },
+      deduped: false,
+      executed_at: nowIso()
+    }
+  };
+}
+
 async function executeIntent({ app, run, intent }) {
   const key = intent.idempotency_key;
   const persistedReuse = key ? app.stateDb.getIdempotencyResult(key) : null;
@@ -209,7 +2248,13 @@ async function executeIntent({ app, run, intent }) {
     return reused;
   }
 
-  const result = buildExecutionResult({ actionIntent: intent });
+  let connectorMeta = null;
+  let result = buildExecutionResult({ actionIntent: intent });
+  const connectorExecution = await invokeIntentViaConnector({ app, run, intent });
+  if (connectorExecution?.result) {
+    result = connectorExecution.result;
+    connectorMeta = connectorExecution;
+  }
 
   if (key) {
     app.store.idempotencyResults.set(key, result);
@@ -218,6 +2263,41 @@ async function executeIntent({ app, run, intent }) {
       runId: run.id,
       payload: result,
       createdAt: nowIso()
+    });
+  }
+
+  if (connectorMeta?.connectorId && connectorMeta?.connectorBindingId) {
+    await appendAudit({
+      app,
+      entry: makeAuditEntry({
+        runId: run.id,
+        eventType: 'connector.invoke.requested',
+        actorInfo: actor('agent', run.agent_id),
+        payload: {
+          connector_id: connectorMeta.connectorId,
+          connector_binding_id: connectorMeta.connectorBindingId,
+          capability: intent.capability,
+          side_effect: intent.side_effect,
+          risk_hint: intent.risk_hint
+        }
+      })
+    });
+
+    await appendEvent({
+      app,
+      runId: run.id,
+      name: result.status === 'executed' ? 'connector.invoked' : 'connector.invoke.failed',
+      payload: result
+    });
+
+    await appendAudit({
+      app,
+      entry: makeAuditEntry({
+        runId: run.id,
+        eventType: result.status === 'executed' ? 'connector.invoke.executed' : 'connector.invoke.error',
+        actorInfo: actor('agent', run.agent_id),
+        payload: result
+      })
     });
   }
 
@@ -249,8 +2329,17 @@ async function executeAllowedIntents({ app, run }) {
   for (const intent of run.action_intents) {
     const decision = decisionsByActionId.get(intent.id);
     if (!decision || decision.decision !== 'allow') continue;
-    await executeIntent({ app, run, intent });
+    const execution = await executeIntent({ app, run, intent });
+    if (!execution || execution.status !== 'executed') {
+      return {
+        ok: false,
+        failed_intent_id: intent.id,
+        reason_code: execution?.reason_code || 'action.execute.error'
+      };
+    }
   }
+
+  return { ok: true };
 }
 
 function rebuildPendingApprovalsForRun(run) {
@@ -997,6 +3086,7 @@ function buildAgentIdeBridgeProfile({
   workspaceId = '',
   agentId = '',
   actorId = '',
+  workspacePath = '',
   rootDir = '',
   allowlists = [],
   mcpBridgeBearerTokenEnabled = false,
@@ -1006,6 +3096,7 @@ function buildAgentIdeBridgeProfile({
   const normalizedWorkspaceId = String(workspaceId || '').trim();
   const normalizedAgentId = String(agentId || '').trim();
   const normalizedActorId = String(actorId || '').trim() || 'usr_yingapple';
+  const normalizedWorkspacePath = String(workspacePath || '').trim();
   const normalizedRootDir = path.resolve(String(rootDir || defaultProjectRoot));
   const bridgeScriptPath = path.resolve(normalizedRootDir, 'src', 'mcp-bridge-stdio.js');
   const normalizedStreamableHttpUrl = String(streamableHttpUrl || '').trim();
@@ -1037,6 +3128,7 @@ function buildAgentIdeBridgeProfile({
       env: {
         FLOCKMESH_ROOT_DIR: normalizedRootDir,
         FLOCKMESH_WORKSPACE_ID: normalizedWorkspaceId,
+        ...(normalizedWorkspacePath ? { FLOCKMESH_WORKSPACE_PATH: normalizedWorkspacePath } : {}),
         ...(normalizedAgentId ? { FLOCKMESH_AGENT_ID: normalizedAgentId } : {}),
         FLOCKMESH_ACTOR_ID: normalizedActorId
       }
@@ -1283,6 +3375,40 @@ function toEvidenceDigest(stream) {
     total: stream.total,
     exported: stream.exported,
     truncated: stream.truncated
+  };
+}
+
+function buildSessionSummaryFromRun(run) {
+  const decisions = Array.isArray(run.policy_decisions) ? run.policy_decisions : [];
+  const approvalState = run.approval_state && typeof run.approval_state === 'object'
+    ? run.approval_state
+    : {};
+  const decisionSummary = decisions.reduce(
+    (acc, item) => {
+      const decision = asTrimmedString(item?.decision);
+      if (!decision) return acc;
+      if (decision === 'allow') acc.allow += 1;
+      if (decision === 'escalate') acc.escalate += 1;
+      if (decision === 'deny') acc.deny += 1;
+      return acc;
+    },
+    { allow: 0, escalate: 0, deny: 0 }
+  );
+
+  return {
+    session_id: run.id,
+    run_id: run.id,
+    workspace_id: run.workspace_id,
+    agent_id: run.agent_id,
+    playbook_id: run.playbook_id,
+    actor_id: asTrimmedString(run.trigger?.actor_id || ''),
+    trigger_source: asTrimmedString(run.trigger?.source || ''),
+    status: run.status,
+    started_at: run.started_at,
+    ended_at: run.ended_at || null,
+    revision: Number(run.revision || 1),
+    pending_approvals: Object.keys(approvalState).length,
+    policy_summary: decisionSummary
   };
 }
 
@@ -1587,6 +3713,9 @@ export function buildApp({
   app.decorate('trustedDefaultActorId', String(trustedDefaultActorId || '').trim());
   app.decorate('mcpBridgeBearerToken', String(mcpBridgeBearerToken || '').trim());
   app.decorate('mcpBridgePublicBaseUrl', normalizeBaseUrl(mcpBridgePublicBaseUrl));
+  app.decorate('integrationRuntime', {
+    feishu_webhook_url: ''
+  });
   app.decorate('mcpBridgeSessions', new Map());
   app.decorate('mcpBridgeCore', createMcpBridgeCore({
     app,
@@ -1624,9 +3753,13 @@ export function buildApp({
     const bindings = stateDb.listBindings({ limit: 5000, offset: 0 }).items;
     const runs = stateDb.listRuns({ limit: 5000, offset: 0 }).items;
     const idempotencyResults = stateDb.listIdempotencyResults({ limit: 5000, offset: 0 });
+    const environmentSets = stateDb.listEnvironmentSets({ limit: 5000, offset: 0 }).items;
+    const roleBindings = stateDb.listRoleBindings({ limit: 5000, offset: 0 }).items;
 
     for (const agent of agents) app.store.agents.set(agent.id, agent);
     for (const binding of bindings) app.store.connectorBindings.set(binding.id, binding);
+    for (const environmentSet of environmentSets) app.store.environmentSets.set(environmentSet.id, environmentSet);
+    for (const roleBinding of roleBindings) app.store.roleBindings.set(roleBinding.id, roleBinding);
 
     for (const run of runs) {
       app.store.runs.set(run.id, run);
@@ -2201,6 +4334,7 @@ export function buildApp({
         required: ['workspace_id', 'owner_id', 'template_id'],
         properties: {
           workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          workspace_path: { type: 'string', minLength: 1, maxLength: 1024 },
           owner_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' },
           template_id: { type: 'string', enum: ['weekly_ops_sync', 'incident_response'] },
           agent_name: { type: 'string', minLength: 1, maxLength: 120 },
@@ -2221,6 +4355,7 @@ export function buildApp({
     try {
       const input = request.body;
       const workspaceId = String(input.workspace_id || '').trim();
+      const workspacePath = String(input.workspace_path || '').trim();
       const ownerId = String(input.owner_id || '').trim();
       const actorIdentity = resolveRequestActorId(request, {
         fallbackActorId: app.trustedDefaultActorId
@@ -2307,7 +4442,8 @@ export function buildApp({
         metadata: {
           source: 'quickstart.one_person',
           template_id: template.template_id,
-          kit_id: preview.kit.kit_id
+          kit_id: preview.kit.kit_id,
+          ...(workspacePath ? { workspace_path: workspacePath } : {})
         },
         created_at: now,
         updated_at: now
@@ -2342,6 +4478,12 @@ export function buildApp({
         app.stateDb.saveBinding(binding);
         createdBindings.push(binding);
       }
+
+      const bootstrappedRoleBindings = bootstrapWorkspaceRoleBindings({
+        app,
+        workspaceId,
+        ownerActorId: ownerId
+      });
 
       const proposedConnectorIds = new Set(
         preview.connector_plan.proposed_bindings.map((item) => item.connector_id)
@@ -2390,6 +4532,7 @@ export function buildApp({
         ...(input.idempotency_key ? { idempotency_key: input.idempotency_key } : {}),
         quickstart: {
           workspace_id: workspaceId,
+          workspace_path: workspacePath || null,
           owner_id: ownerId,
           agent_name: profile.name,
           kit_id: template.kit_id,
@@ -2400,6 +4543,10 @@ export function buildApp({
         created_bindings: createdBindings,
         skipped_connectors: skippedConnectors,
         auto_auth_connectors: autoAuthConnectors,
+        role_bootstrap: {
+          created: bootstrappedRoleBindings.length,
+          items: bootstrappedRoleBindings
+        },
         run: runPayload,
         blueprint_summary: {
           warning_count: preview.warnings.length,
@@ -2431,6 +4578,701 @@ export function buildApp({
       reply.code(400);
       return { message: err.message };
     }
+  });
+
+  app.get('/v0/access/permissions', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const workspaceId = asTrimmedString(request.query?.workspace_id || '');
+    const actorIdentity = resolveRequestActorId(request, {
+      fallbackActorId: app.trustedDefaultActorId
+    });
+    if (!actorIdentity.ok) {
+      reply.code(actorIdentity.errorCode);
+      return { message: actorIdentity.message };
+    }
+
+    const targetActorId = asTrimmedString(request.query?.actor_id || actorIdentity.actor_id);
+    if (
+      targetActorId !== actorIdentity.actor_id &&
+      !actorHasPermission({
+        app,
+        workspaceId,
+        actorId: actorIdentity.actor_id,
+        permission: 'role.manage'
+      })
+    ) {
+      reply.code(403);
+      return { message: 'Actor lacks permission: role.manage' };
+    }
+
+    const bootstrap = !workspaceHasRoleBindings(app, workspaceId);
+    const resolved = resolveActorPermissions({
+      app,
+      workspaceId,
+      actorId: targetActorId
+    });
+
+    const bootstrapRoles = ['workspace_admin', 'operator', 'auditor'];
+    const bootstrapPermissions = Array.from(
+      new Set(bootstrapRoles.flatMap((role) => ROLE_PERMISSION_LIBRARY[role] || []))
+    ).sort();
+
+    return {
+      version: 'v0',
+      generated_at: nowIso(),
+      workspace_id: workspaceId,
+      actor_id: targetActorId,
+      bootstrap_available: bootstrap,
+      roles: resolved.roles,
+      permissions: resolved.permissions,
+      bootstrap_roles: bootstrap ? bootstrapRoles : [],
+      bootstrap_permissions: bootstrap ? bootstrapPermissions : []
+    };
+  });
+
+  app.get('/v0/access/role-bindings', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' },
+          role: { type: 'string', enum: Array.from(ROLE_NAME_SET) },
+          limit: { type: 'integer', minimum: 1, maximum: 1000 },
+          offset: { type: 'integer', minimum: 0 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const workspaceId = asTrimmedString(request.query?.workspace_id || '');
+    const actorIdentity = resolveRequestActorId(request, {
+      fallbackActorId: app.trustedDefaultActorId
+    });
+    if (!actorIdentity.ok) {
+      reply.code(actorIdentity.errorCode);
+      return { message: actorIdentity.message };
+    }
+
+    const bootstrap = !workspaceHasRoleBindings(app, workspaceId);
+    if (
+      !bootstrap &&
+      !actorHasPermission({
+        app,
+        workspaceId,
+        actorId: actorIdentity.actor_id,
+        permission: 'role.manage'
+      })
+    ) {
+      reply.code(403);
+      return { message: 'Actor lacks permission: role.manage' };
+    }
+
+    const page = app.stateDb.listRoleBindings({
+      workspaceId,
+      limit: request.query?.limit,
+      offset: request.query?.offset
+    });
+
+    const actorFilter = asTrimmedString(request.query?.actor_id || '');
+    const roleFilter = asTrimmedString(request.query?.role || '');
+    const filtered = page.items.filter((item) => {
+      if (actorFilter && asTrimmedString(item.actor_id) !== actorFilter) return false;
+      if (roleFilter && asTrimmedString(item.role) !== roleFilter) return false;
+      return true;
+    });
+
+    return {
+      total: filtered.length,
+      limit: page.limit,
+      offset: page.offset,
+      bootstrap_available: bootstrap,
+      items: filtered
+    };
+  });
+
+  app.post('/v0/access/role-bindings', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id', 'actor_id', 'role'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' },
+          role: { type: 'string', enum: Array.from(ROLE_NAME_SET) },
+          reason: { type: 'string', maxLength: 300 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const body = request.body;
+    const workspaceId = asTrimmedString(body.workspace_id || '');
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId,
+      permission: 'role.manage',
+      allowWorkspaceBootstrap: true
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    if (permission.bootstrap && asTrimmedString(body.actor_id) !== permission.actor_id) {
+      reply.code(403);
+      return { message: 'Bootstrap role binding can only target current actor' };
+    }
+
+    const role = normalizeRoleName(body.role);
+    const actorId = asTrimmedString(body.actor_id || '');
+    const existing = listActorRoleBindings({
+      app,
+      workspaceId,
+      actorId
+    }).find((binding) => binding.role === role);
+
+    if (existing) {
+      reply.code(200);
+      return {
+        ...existing,
+        reused: true
+      };
+    }
+
+    const now = nowIso();
+    const binding = {
+      id: makeId('rlb'),
+      workspace_id: workspaceId,
+      actor_id: actorId,
+      role,
+      source: permission.bootstrap ? 'workspace_bootstrap_manual' : 'manual_grant',
+      reason: asTrimmedString(body.reason || ''),
+      created_at: now,
+      updated_at: now
+    };
+
+    app.store.roleBindings.set(binding.id, binding);
+    app.stateDb.saveRoleBinding(binding);
+    reply.code(201);
+    return binding;
+  });
+
+  app.get('/v0/environments/sets', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          mode: { type: 'string', enum: Array.from(ACCESS_MODE_SET) },
+          scope: { type: 'string', enum: Array.from(ENV_SCOPE_SET) },
+          limit: { type: 'integer', minimum: 1, maximum: 500 },
+          offset: { type: 'integer', minimum: 0 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const workspaceId = asTrimmedString(request.query?.workspace_id || '');
+    const actorIdentity = resolveRequestActorId(request, {
+      fallbackActorId: app.trustedDefaultActorId
+    });
+    if (!actorIdentity.ok) {
+      reply.code(actorIdentity.errorCode);
+      return { message: actorIdentity.message };
+    }
+
+    const hasWorkspaceRole = actorHasAnyWorkspaceRole({
+      app,
+      workspaceId,
+      actorId: actorIdentity.actor_id
+    });
+    if (!hasWorkspaceRole && workspaceHasRoleBindings(app, workspaceId)) {
+      reply.code(403);
+      return { message: 'Actor is not assigned in workspace' };
+    }
+
+    const page = app.stateDb.listEnvironmentSets({
+      workspaceId,
+      limit: request.query?.limit,
+      offset: request.query?.offset
+    });
+    const modeFilter = asTrimmedString(request.query?.mode || '');
+    const scopeFilter = asTrimmedString(request.query?.scope || '');
+    const filtered = page.items.filter((item) => {
+      if (modeFilter && asTrimmedString(item.mode) !== modeFilter) return false;
+      if (scopeFilter && asTrimmedString(item.scope) !== scopeFilter) return false;
+      return true;
+    });
+
+    return {
+      total: filtered.length,
+      limit: page.limit,
+      offset: page.offset,
+      items: filtered.map((item) => sanitizeEnvironmentSet(item))
+    };
+  });
+
+  app.get('/v0/environments/effective', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' },
+          mode: { type: 'string', enum: Array.from(ACCESS_MODE_SET) },
+          include_values: { type: 'boolean' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const workspaceId = asTrimmedString(request.query?.workspace_id || '');
+    const actorIdentity = resolveRequestActorId(request, {
+      fallbackActorId: app.trustedDefaultActorId
+    });
+    if (!actorIdentity.ok) {
+      reply.code(actorIdentity.errorCode);
+      return { message: actorIdentity.message };
+    }
+
+    const callerActorId = actorIdentity.actor_id;
+    const targetActorId = asTrimmedString(request.query?.actor_id || callerActorId);
+    const modeFilter = asTrimmedString(request.query?.mode || '');
+    const hasBindings = workspaceHasRoleBindings(app, workspaceId);
+    const callerAssigned = actorHasAnyWorkspaceRole({
+      app,
+      workspaceId,
+      actorId: callerActorId
+    });
+    if (hasBindings && !callerAssigned) {
+      reply.code(403);
+      return { message: 'Actor is not assigned in workspace' };
+    }
+
+    const callerCanManageEnvironment = actorHasPermission({
+      app,
+      workspaceId,
+      actorId: callerActorId,
+      permission: 'environment.manage'
+    });
+    const callerCanManageRole = actorHasPermission({
+      app,
+      workspaceId,
+      actorId: callerActorId,
+      permission: 'role.manage'
+    });
+
+    if (
+      targetActorId !== callerActorId &&
+      hasBindings &&
+      !callerCanManageEnvironment &&
+      !callerCanManageRole
+    ) {
+      reply.code(403);
+      return { message: 'Actor lacks permission: environment.manage or role.manage' };
+    }
+
+    const effective = buildEffectiveEnvironmentEntries({
+      app,
+      workspaceId,
+      targetActorId,
+      modeFilter
+    });
+    const includePlainValues = request.query?.include_values === true
+      && (!hasBindings || callerCanManageEnvironment || callerCanManageRole || targetActorId === callerActorId);
+
+    return {
+      version: 'v0',
+      generated_at: nowIso(),
+      workspace_id: workspaceId,
+      actor_id: targetActorId,
+      mode_filter: modeFilter || 'all',
+      include_values: includePlainValues,
+      target_roles: effective.target_roles,
+      matched_sets: effective.matched_sets,
+      total: effective.items.length,
+      items: effective.items.map((entry) =>
+        sanitizeEffectiveEnvironmentEntry(entry, { includePlainValues })
+      )
+    };
+  });
+
+  app.get('/v0/environments/sets/:set_id', {
+    schema: {
+      params: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['set_id'],
+        properties: {
+          set_id: { type: 'string', pattern: '^envs_[A-Za-z0-9_-]{6,64}$' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { set_id: setId } = request.params;
+    const actorIdentity = resolveRequestActorId(request, {
+      fallbackActorId: app.trustedDefaultActorId
+    });
+    if (!actorIdentity.ok) {
+      reply.code(actorIdentity.errorCode);
+      return { message: actorIdentity.message };
+    }
+
+    const environmentSet = app.store.environmentSets.get(setId) || app.stateDb.getEnvironmentSet(setId);
+    if (!environmentSet) {
+      reply.code(404);
+      return { message: 'Environment set not found' };
+    }
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+
+    if (
+      workspaceHasRoleBindings(app, environmentSet.workspace_id) &&
+      !actorHasAnyWorkspaceRole({
+        app,
+        workspaceId: environmentSet.workspace_id,
+        actorId: actorIdentity.actor_id
+      })
+    ) {
+      reply.code(403);
+      return { message: 'Actor is not assigned in workspace' };
+    }
+
+    return sanitizeEnvironmentSet(environmentSet);
+  });
+
+  app.post('/v0/environments/sets', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id', 'name', 'entries'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          mode: { type: 'string', enum: Array.from(ACCESS_MODE_SET) },
+          scope: { type: 'string', enum: Array.from(ENV_SCOPE_SET) },
+          name: { type: 'string', minLength: 2, maxLength: 120 },
+          description: { type: 'string', maxLength: 400 },
+          status: { type: 'string', enum: ['active', 'inactive'] },
+          entries: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 300,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['key', 'value'],
+              properties: {
+                key: { type: 'string', minLength: 2, maxLength: 128 },
+                provider: { type: 'string', minLength: 1, maxLength: 40 },
+                value: { type: 'string', minLength: 1, maxLength: 4000 },
+                visibility: { type: 'string', enum: Array.from(ENV_VISIBILITY_SET) },
+                target: { type: 'string', maxLength: 120 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const body = request.body;
+    const workspaceId = asTrimmedString(body.workspace_id || '');
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId,
+      permission: 'environment.manage',
+      allowWorkspaceBootstrap: true
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    let entries;
+    try {
+      entries = normalizeEnvironmentEntries(body.entries);
+    } catch (err) {
+      reply.code(400);
+      return { message: String(err.message || err) };
+    }
+
+    const now = nowIso();
+    const environmentSet = {
+      id: makeId('envs'),
+      workspace_id: workspaceId,
+      mode: normalizeAccessMode(body.mode),
+      scope: normalizeEnvironmentScope(body.scope),
+      name: asTrimmedString(body.name),
+      description: asTrimmedString(body.description || ''),
+      status: asTrimmedString(body.status || 'active') === 'inactive' ? 'inactive' : 'active',
+      entries,
+      created_by: permission.actor_id,
+      updated_by: permission.actor_id,
+      created_at: now,
+      updated_at: now
+    };
+
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+    app.stateDb.saveEnvironmentSet(environmentSet);
+
+    if (permission.bootstrap) {
+      bootstrapWorkspaceRoleBindings({
+        app,
+        workspaceId,
+        ownerActorId: permission.actor_id
+      });
+    }
+
+    reply.code(201);
+    return sanitizeEnvironmentSet(environmentSet);
+  });
+
+  app.post('/v0/environments/sets/:set_id/entries', {
+    schema: {
+      params: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['set_id'],
+        properties: {
+          set_id: { type: 'string', pattern: '^envs_[A-Za-z0-9_-]{6,64}$' }
+        }
+      },
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['entries'],
+        properties: {
+          entries: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 300,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['key', 'value'],
+              properties: {
+                key: { type: 'string', minLength: 2, maxLength: 128 },
+                provider: { type: 'string', minLength: 1, maxLength: 40 },
+                value: { type: 'string', minLength: 1, maxLength: 4000 },
+                visibility: { type: 'string', enum: Array.from(ENV_VISIBILITY_SET) },
+                target: { type: 'string', maxLength: 120 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { set_id: setId } = request.params;
+    const environmentSet = app.store.environmentSets.get(setId) || app.stateDb.getEnvironmentSet(setId);
+    if (!environmentSet) {
+      reply.code(404);
+      return { message: 'Environment set not found' };
+    }
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId: environmentSet.workspace_id,
+      permission: 'environment.manage'
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    let patchEntries;
+    try {
+      patchEntries = normalizeEnvironmentEntries(request.body.entries);
+    } catch (err) {
+      reply.code(400);
+      return { message: String(err.message || err) };
+    }
+
+    environmentSet.entries = mergeEnvironmentEntries(environmentSet.entries || [], patchEntries);
+    environmentSet.updated_by = permission.actor_id;
+    environmentSet.updated_at = nowIso();
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+    app.stateDb.saveEnvironmentSet(environmentSet);
+    return sanitizeEnvironmentSet(environmentSet);
+  });
+
+  app.post('/v0/environments/sets/:set_id/activate', {
+    schema: {
+      params: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['set_id'],
+        properties: {
+          set_id: { type: 'string', pattern: '^envs_[A-Za-z0-9_-]{6,64}$' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { set_id: setId } = request.params;
+    const environmentSet = app.store.environmentSets.get(setId) || app.stateDb.getEnvironmentSet(setId);
+    if (!environmentSet) {
+      reply.code(404);
+      return { message: 'Environment set not found' };
+    }
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId: environmentSet.workspace_id,
+      permission: 'environment.manage'
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    const allSets = app.stateDb.listEnvironmentSets({
+      workspaceId: environmentSet.workspace_id,
+      limit: 5000,
+      offset: 0
+    }).items;
+    for (const item of allSets) {
+      if (item.mode !== environmentSet.mode || item.scope !== environmentSet.scope) continue;
+      if (item.id === environmentSet.id) continue;
+      if (item.status === 'inactive') continue;
+      item.status = 'inactive';
+      item.updated_by = permission.actor_id;
+      item.updated_at = nowIso();
+      app.store.environmentSets.set(item.id, item);
+      app.stateDb.saveEnvironmentSet(item);
+    }
+
+    environmentSet.status = 'active';
+    environmentSet.updated_by = permission.actor_id;
+    environmentSet.updated_at = nowIso();
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+    app.stateDb.saveEnvironmentSet(environmentSet);
+    return sanitizeEnvironmentSet(environmentSet);
+  });
+
+  app.post('/v0/environments/sets/:set_id/apply-runtime', {
+    schema: {
+      params: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['set_id'],
+        properties: {
+          set_id: { type: 'string', pattern: '^envs_[A-Za-z0-9_-]{6,64}$' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { set_id: setId } = request.params;
+    const environmentSet = app.store.environmentSets.get(setId) || app.stateDb.getEnvironmentSet(setId);
+    if (!environmentSet) {
+      reply.code(404);
+      return { message: 'Environment set not found' };
+    }
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId: environmentSet.workspace_id,
+      permission: 'environment.manage'
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    const feishuWebhook = resolveFeishuWebhookFromEnvironmentSet(environmentSet);
+    app.integrationRuntime.feishu_webhook_url = feishuWebhook;
+
+    return {
+      version: 'v0',
+      applied_at: nowIso(),
+      set_id: environmentSet.id,
+      workspace_id: environmentSet.workspace_id,
+      runtime_updates: {
+        feishu_webhook_applied: Boolean(feishuWebhook)
+      },
+      feishu_status: resolveFeishuConnectionStatus(app)
+    };
+  });
+
+  app.post('/v0/environments/sets/:set_id/verify', {
+    schema: {
+      params: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['set_id'],
+        properties: {
+          set_id: { type: 'string', pattern: '^envs_[A-Za-z0-9_-]{6,64}$' }
+        }
+      },
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          probe_mode: { type: 'string', enum: Array.from(ENV_VERIFY_PROBE_MODE_SET) },
+          timeout_ms: { type: 'integer', minimum: 500, maximum: 10000 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { set_id: setId } = request.params;
+    const environmentSet = app.store.environmentSets.get(setId) || app.stateDb.getEnvironmentSet(setId);
+    if (!environmentSet) {
+      reply.code(404);
+      return { message: 'Environment set not found' };
+    }
+    app.store.environmentSets.set(environmentSet.id, environmentSet);
+
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId: environmentSet.workspace_id,
+      permission: 'environment.manage'
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    const probeMode = normalizeVerifyProbeMode(request.body?.probe_mode);
+    const timeoutMs = Math.min(
+      Math.max(Number(request.body?.timeout_ms || 4000), 500),
+      10000
+    );
+    const report = verifyEnvironmentSet(environmentSet);
+    const connectivity = probeMode === 'connectivity'
+      ? await probeEnvironmentSetConnectivity(environmentSet, { timeoutMs })
+      : null;
+
+    return {
+      version: 'v0',
+      verified_at: nowIso(),
+      probe_mode: probeMode,
+      timeout_ms: timeoutMs,
+      set: sanitizeEnvironmentSet(environmentSet),
+      report,
+      ...(connectivity ? { connectivity } : {})
+    };
   });
 
   app.post('/v0/connectors/bindings', {
@@ -2645,6 +5487,123 @@ export function buildApp({
     };
   });
 
+  app.get('/v0/integrations/feishu/status', async () => {
+    return {
+      version: 'v0',
+      generated_at: nowIso(),
+      ...resolveFeishuConnectionStatus(app)
+    };
+  });
+
+  app.post('/v0/integrations/feishu/webhook', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          webhook_url: { type: 'string', minLength: 1, maxLength: 2000 },
+          clear: { type: 'boolean' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const clear = request.body?.clear === true;
+    const webhookUrl = asTrimmedString(request.body?.webhook_url || '');
+
+    if (!clear && !webhookUrl) {
+      reply.code(400);
+      return { message: 'webhook_url is required unless clear=true' };
+    }
+
+    if (clear) {
+      app.integrationRuntime.feishu_webhook_url = '';
+      return {
+        version: 'v0',
+        updated_at: nowIso(),
+        status: 'cleared',
+        ...resolveFeishuConnectionStatus(app)
+      };
+    }
+
+    try {
+      const parsed = new URL(webhookUrl);
+      if (parsed.protocol !== 'https:') {
+        reply.code(400);
+        return { message: 'webhook_url must use https protocol' };
+      }
+    } catch {
+      reply.code(400);
+      return { message: 'webhook_url must be a valid URL' };
+    }
+
+    app.integrationRuntime.feishu_webhook_url = webhookUrl;
+    return {
+      version: 'v0',
+      updated_at: nowIso(),
+      status: 'updated',
+      ...resolveFeishuConnectionStatus(app)
+    };
+  });
+
+  app.post('/v0/integrations/feishu/test-message', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          channel: { type: 'string', minLength: 1, maxLength: 120 },
+          content: { type: 'string', minLength: 1, maxLength: 4000 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const adapter = app.connectorAdapters.con_feishu_official;
+    if (!adapter) {
+      reply.code(501);
+      return { message: 'Feishu adapter not implemented' };
+    }
+
+    const payload = request.body || {};
+    const channel = asTrimmedString(payload.channel || 'flockmesh-onboarding');
+    const content = asTrimmedString(payload.content || 'FlockMesh onboarding Feishu connectivity test');
+
+    try {
+      const adapterResult = await withTimeout(
+        () => adapter.invoke({
+          runId: `run_probe_${shortHash({ at: nowIso(), channel, content })}`,
+          capability: 'message.send',
+          parameters: { channel, content },
+          attempt: 1,
+          runtime: {
+            feishuWebhookUrl: resolveActiveFeishuWebhook(app).webhook_url
+          }
+        }),
+        app.adapterTimeoutMs
+      );
+
+      return {
+        version: 'v0',
+        generated_at: nowIso(),
+        ...resolveFeishuConnectionStatus(app),
+        adapter_result: adapterResult
+      };
+    } catch (err) {
+      if (err instanceof AdapterCapabilityError) {
+        reply.code(409);
+        return { message: err.message };
+      }
+      if (err instanceof AdapterTimeoutError) {
+        reply.code(503);
+        return {
+          message: 'Feishu test message timed out',
+          reason_code: 'connector.invoke.timeout',
+          timeout_ms: err.timeoutMs
+        };
+      }
+      throw err;
+    }
+  });
+
   app.get('/v0/integrations/agent-ide-profile', {
     schema: {
       querystring: {
@@ -2653,6 +5612,7 @@ export function buildApp({
         required: ['workspace_id'],
         properties: {
           workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          workspace_path: { type: 'string', minLength: 1, maxLength: 1024 },
           agent_id: { type: 'string', pattern: '^agt_[A-Za-z0-9_-]{6,64}$' },
           actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' }
         }
@@ -2660,6 +5620,7 @@ export function buildApp({
     }
   }, async (request) => {
     const workspaceId = request.query?.workspace_id || '';
+    const workspacePath = request.query?.workspace_path || '';
     const agentId = request.query?.agent_id || '';
     const actorId = request.query?.actor_id || '';
     const publicBaseUrl = resolvePublicBaseUrl({ request, app });
@@ -2680,11 +5641,85 @@ export function buildApp({
       workspaceId,
       agentId,
       actorId,
+      workspacePath,
       rootDir,
       allowlists,
       mcpBridgeBearerTokenEnabled: Boolean(app.mcpBridgeBearerToken),
       streamableHttpUrl: `${publicBaseUrl}/v0/mcp/stream`,
       protocolVersion: MCP_BRIDGE_PROTOCOL_VERSION
+    });
+  });
+
+  app.get('/v0/workstation/readiness', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' },
+          mode: { type: 'string', enum: Array.from(ACCESS_MODE_SET) },
+          workspace_path: { type: 'string', minLength: 1, maxLength: 1024 },
+          include_probe: { type: 'boolean' },
+          timeout_ms: { type: 'integer', minimum: 500, maximum: 10000 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const workspaceId = asTrimmedString(request.query?.workspace_id || '');
+    const actorIdentity = resolveRequestActorId(request, {
+      fallbackActorId: app.trustedDefaultActorId
+    });
+    if (!actorIdentity.ok) {
+      reply.code(actorIdentity.errorCode);
+      return { message: actorIdentity.message };
+    }
+
+    const callerActorId = actorIdentity.actor_id;
+    const targetActorId = asTrimmedString(request.query?.actor_id || callerActorId);
+    const hasBindings = workspaceHasRoleBindings(app, workspaceId);
+    const callerAssigned = actorHasAnyWorkspaceRole({
+      app,
+      workspaceId,
+      actorId: callerActorId
+    });
+    if (hasBindings && !callerAssigned) {
+      reply.code(403);
+      return { message: 'Actor is not assigned in workspace' };
+    }
+    if (
+      targetActorId !== callerActorId &&
+      !actorHasPermission({
+        app,
+        workspaceId,
+        actorId: callerActorId,
+        permission: 'role.manage'
+      })
+    ) {
+      reply.code(403);
+      return { message: 'Actor lacks permission: role.manage' };
+    }
+
+    const modeFilterRaw = asTrimmedString(request.query?.mode || '');
+    const modeFilter = ACCESS_MODE_SET.has(modeFilterRaw) ? modeFilterRaw : '';
+    const workspacePath = asTrimmedString(request.query?.workspace_path || '');
+    const includeProbe = request.query?.include_probe === true;
+    const timeoutMs = Math.min(
+      Math.max(Number(request.query?.timeout_ms || 2200), 500),
+      10000
+    );
+
+    return await buildWorkstationReadinessSnapshot({
+      app,
+      request,
+      workspaceId,
+      actorId: targetActorId,
+      modeFilter,
+      workspacePath,
+      includeProbe,
+      probeTimeoutMs: timeoutMs,
+      rootDir
     });
   });
 
@@ -3026,7 +6061,10 @@ export function buildApp({
         () => adapter.simulate({
           runId: body.run_id,
           capability: body.capability,
-          parameters: body.parameters
+          parameters: body.parameters,
+          runtime: {
+            feishuWebhookUrl: resolveActiveFeishuWebhook(app).webhook_url
+          }
         }),
         app.adapterTimeoutMs
       );
@@ -3394,7 +6432,10 @@ export function buildApp({
             capability: body.capability,
             parameters: body.parameters,
             idempotencyKey: key,
-            attempt
+            attempt,
+            runtime: {
+              feishuWebhookUrl: resolveActiveFeishuWebhook(app).webhook_url
+            }
           }),
           app.adapterTimeoutMs
         );
@@ -4665,6 +7706,24 @@ export function buildApp({
       reply.code(triggerActorMatch.errorCode);
       return { message: triggerActorMatch.message };
     }
+    const runPermission = ensureActorPermission({
+      app,
+      request,
+      workspaceId: body.workspace_id,
+      permission: 'run.execute',
+      allowWorkspaceBootstrap: true
+    });
+    if (!runPermission.ok) {
+      reply.code(runPermission.errorCode);
+      return { message: runPermission.message };
+    }
+    if (runPermission.bootstrap) {
+      bootstrapWorkspaceRoleBindings({
+        app,
+        workspaceId: body.workspace_id,
+        ownerActorId: runPermission.actor_id
+      });
+    }
     const agent = app.store.agents.get(body.agent_id) || app.stateDb.getAgent(body.agent_id);
     if (!agent) {
       reply.code(404);
@@ -4810,19 +7869,37 @@ export function buildApp({
     }
 
     if (run.status === 'running') {
-      await executeAllowedIntents({ app, run });
-      run.status = 'completed';
-      run.ended_at = nowIso();
+      const executionSummary = await executeAllowedIntents({ app, run });
+      if (executionSummary?.ok) {
+        run.status = 'completed';
+        run.ended_at = nowIso();
 
-      await appendAudit({
-        app,
-        entry: makeAuditEntry({
-          runId: run.id,
-          eventType: 'run.completed',
-          actorInfo: actor('system', 'runtime'),
-          payload: { status: run.status }
-        })
-      });
+        await appendAudit({
+          app,
+          entry: makeAuditEntry({
+            runId: run.id,
+            eventType: 'run.completed',
+            actorInfo: actor('system', 'runtime'),
+            payload: { status: run.status }
+          })
+        });
+      } else {
+        run.status = 'failed';
+        run.ended_at = nowIso();
+
+        await appendAudit({
+          app,
+          entry: makeAuditEntry({
+            runId: run.id,
+            eventType: 'run.failed',
+            actorInfo: actor('system', 'runtime'),
+            payload: {
+              reason: executionSummary?.reason_code || 'action.execute.error',
+              failed_intent_id: executionSummary?.failed_intent_id || ''
+            }
+          })
+        });
+      }
     }
 
     run = app.stateDb.saveRun(run);
@@ -4885,6 +7962,18 @@ export function buildApp({
     if (!run) {
       reply.code(404);
       return { message: 'Run not found' };
+    }
+
+    const workspaceBootstrap = !workspaceHasRoleBindings(app, run.workspace_id);
+    const canResolveApproval = actorHasPermission({
+      app,
+      workspaceId: run.workspace_id,
+      actorId: actorIdentity.actor_id,
+      permission: 'approval.resolve'
+    });
+    if (!workspaceBootstrap && !canResolveApproval) {
+      reply.code(403);
+      return { message: 'Actor lacks permission: approval.resolve' };
     }
 
     if (run.status !== 'waiting_approval') {
@@ -5029,7 +8118,26 @@ export function buildApp({
         })
       });
     } else if (decision.decision === 'allow') {
-      await executeIntent({ app, run, intent });
+      const execution = await executeIntent({ app, run, intent });
+      if (!execution || execution.status !== 'executed') {
+        run.status = 'failed';
+        run.ended_at = nowIso();
+        run = app.stateDb.saveRun(run);
+        app.store.runs.set(run.id, run);
+
+        await appendAudit({
+          app,
+          entry: makeAuditEntry({
+            runId,
+            eventType: 'run.failed',
+            actorInfo: actor('system', 'runtime'),
+            payload: {
+              reason: execution?.reason_code || 'action.execute.error',
+              action_intent_id: actionIntentId
+            }
+          })
+        });
+      }
     }
 
     if (run.status === 'completed') {
@@ -5188,6 +8296,147 @@ export function buildApp({
       limit,
       offset
     });
+  });
+
+  app.get('/v0/sessions', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['workspace_id'],
+        properties: {
+          workspace_id: { type: 'string', pattern: '^wsp_[A-Za-z0-9_-]{6,64}$' },
+          actor_id: { type: 'string', pattern: '^usr_[A-Za-z0-9_-]{4,64}$' },
+          status: {
+            type: 'string',
+            enum: ['accepted', 'running', 'waiting_approval', 'completed', 'failed', 'cancelled']
+          },
+          limit: { type: 'integer', minimum: 1, maximum: 500 },
+          offset: { type: 'integer', minimum: 0 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const workspaceId = asTrimmedString(request.query?.workspace_id || '');
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId,
+      permission: 'session.read',
+      allowWorkspaceBootstrap: true
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    const actorFilter = asTrimmedString(request.query?.actor_id || '');
+    if (
+      actorFilter &&
+      actorFilter !== permission.actor_id &&
+      !actorHasPermission({
+        app,
+        workspaceId,
+        actorId: permission.actor_id,
+        permission: 'role.manage'
+      })
+    ) {
+      reply.code(403);
+      return { message: 'Actor lacks permission: role.manage' };
+    }
+
+    const allRuns = app.stateDb.listRuns({
+      workspaceId,
+      status: request.query?.status,
+      limit: 5000,
+      offset: 0
+    }).items;
+    const filtered = allRuns.filter((run) => {
+      if (actorFilter && asTrimmedString(run.trigger?.actor_id || '') !== actorFilter) return false;
+      return true;
+    });
+    const limit = Math.min(Math.max(Number(request.query?.limit || 100), 1), 500);
+    const offset = Math.max(Number(request.query?.offset || 0), 0);
+    const pageItems = filtered
+      .slice(offset, offset + limit)
+      .map((run) => buildSessionSummaryFromRun(run));
+
+    return {
+      total: filtered.length,
+      limit,
+      offset,
+      items: pageItems
+    };
+  });
+
+  app.get('/v0/sessions/:session_id', {
+    schema: {
+      params: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['session_id'],
+        properties: {
+          session_id: { type: 'string', pattern: '^run_[A-Za-z0-9_-]{6,64}$' }
+        }
+      },
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          include_evidence: { type: 'boolean' },
+          limit: { type: 'integer', minimum: 1, maximum: 500 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const sessionId = request.params.session_id;
+    const run = app.store.runs.get(sessionId) || app.stateDb.getRun(sessionId);
+    if (!run) {
+      reply.code(404);
+      return { message: 'Session not found' };
+    }
+    app.store.runs.set(run.id, run);
+
+    const permission = ensureActorPermission({
+      app,
+      request,
+      workspaceId: run.workspace_id,
+      permission: 'session.read',
+      allowWorkspaceBootstrap: true
+    });
+    if (!permission.ok) {
+      reply.code(permission.errorCode);
+      return { message: permission.message };
+    }
+
+    const payload = {
+      session: buildSessionSummaryFromRun(run)
+    };
+
+    if (request.query?.include_evidence === true) {
+      const canReadAudit = actorHasPermission({
+        app,
+        workspaceId: run.workspace_id,
+        actorId: permission.actor_id,
+        permission: 'audit.read'
+      }) || permission.bootstrap;
+      if (!canReadAudit) {
+        reply.code(403);
+        return { message: 'Actor lacks permission: audit.read' };
+      }
+
+      const limit = Math.min(Math.max(Number(request.query?.limit || 100), 1), 500);
+      const [events, audit] = await Promise.all([
+        app.ledger.listEvents(run.id, { limit, offset: 0 }),
+        app.ledger.listAudit(run.id, { limit, offset: 0 })
+      ]);
+      payload.evidence = {
+        events,
+        audit
+      };
+    }
+
+    return payload;
   });
 
   app.get('/v0/runs/:run_id', {
